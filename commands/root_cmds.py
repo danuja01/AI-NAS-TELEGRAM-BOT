@@ -4,6 +4,8 @@ Allows temporary elevated access to all file system paths.
 """
 
 import logging
+import subprocess
+import asyncio
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -121,3 +123,125 @@ async def rootstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         logger.error(f"Error in rootstatus_command: {e}", exc_info=True)
         await update.message.reply_text(format_error(f"Status check failed: {e}"))
+
+
+@require_auth
+@rate_limit
+async def ssh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /ssh <command> - Execute shell commands (root access required)."""
+    user_id = update.effective_user.id
+    
+    # Check if user has active root session
+    if not RootSessionManager.is_root_session_active(user_id):
+        await update.message.reply_text(
+            format_error(
+                "❌ **Root Access Required**\n\n"
+                "The `/ssh` command requires an active root session.\n"
+                "Use `/rootlogin <password>` to gain access."
+            )
+        )
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Usage: `/ssh <command>`\n\n"
+            "**Examples:**\n"
+            "• `/ssh ls -la`\n"
+            "• `/ssh mkdir test`\n"
+            "• `/ssh df -h`\n"
+            "• `/ssh docker ps`\n\n"
+            "⚠️ All commands are logged and executed with full privileges.",
+            parse_mode='Markdown'
+        )
+        return
+    
+    command = ' '.join(context.args)
+    
+    try:
+        # Log the command execution
+        logger.warning(f"User {user_id} executing SSH command: {command}")
+        
+        # Send a "processing" message
+        status_msg = await update.message.reply_text(
+            f"⚙️ Executing: `{command}`...",
+            parse_mode='Markdown'
+        )
+        
+        # Execute the command with a timeout
+        process = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            shell=True
+        )
+        
+        try:
+            # Wait for command with 60 second timeout
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(), 
+                timeout=60.0
+            )
+            
+            exit_code = process.returncode
+            
+            # Decode output
+            stdout_text = stdout.decode('utf-8', errors='replace').strip()
+            stderr_text = stderr.decode('utf-8', errors='replace').strip()
+            
+            # Format response
+            response = f"**Command:** `{command}`\n\n"
+            
+            if exit_code == 0:
+                response += f"✅ **Exit Code:** {exit_code}\n\n"
+            else:
+                response += f"❌ **Exit Code:** {exit_code}\n\n"
+            
+            if stdout_text:
+                # Truncate if too long (Telegram limit ~4096 chars)
+                if len(stdout_text) > 3500:
+                    stdout_text = stdout_text[:3500] + "\n... (truncated)"
+                response += f"**Output:**\n```\n{stdout_text}\n```\n\n"
+            
+            if stderr_text:
+                if len(stderr_text) > 500:
+                    stderr_text = stderr_text[:500] + "\n... (truncated)"
+                response += f"**Errors:**\n```\n{stderr_text}\n```"
+            
+            if not stdout_text and not stderr_text:
+                response += "_No output_"
+            
+            # Delete the "processing" message and send result
+            await status_msg.delete()
+            await update.message.reply_text(response, parse_mode='Markdown')
+            
+            # Save to command history
+            await save_command(
+                user_id, 
+                f'/ssh {command}', 
+                f'Exit code: {exit_code}'
+            )
+        
+        except asyncio.TimeoutError:
+            await status_msg.delete()
+            await update.message.reply_text(
+                format_error(
+                    f"❌ **Command Timeout**\n\n"
+                    f"Command: `{command}`\n\n"
+                    f"The command took longer than 60 seconds to execute."
+                )
+            )
+            # Try to kill the process
+            try:
+                process.kill()
+            except:
+                pass
+    
+    except Exception as e:
+        logger.error(f"Error in ssh_command: {e}", exc_info=True)
+        await update.message.reply_text(
+            format_error(
+                f"❌ **Command Execution Failed**\n\n"
+                f"Command: `{command}`\n"
+                f"Error: {str(e)}"
+            )
+        )

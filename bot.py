@@ -119,6 +119,7 @@ def main():
     application.add_handler(CommandHandler("rootlogin", root_cmds.rootlogin_command))
     application.add_handler(CommandHandler("rootlogout", root_cmds.rootlogout_command))
     application.add_handler(CommandHandler("rootstatus", root_cmds.rootstatus_command))
+    application.add_handler(CommandHandler("ssh", root_cmds.ssh_command))
     
     # Register callback query handler for confirmations
     application.add_handler(CallbackQueryHandler(service.handle_confirmation))

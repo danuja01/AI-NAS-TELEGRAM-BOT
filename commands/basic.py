@@ -105,6 +105,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/rootlogin <password>` - Temporary root access (30min)
 `/rootstatus` - Check root session status
 `/rootlogout` - End root session
+`/ssh <command>` - Execute shell commands (requires root)
 
 **ℹ️ General**
 `/start` - Welcome message
