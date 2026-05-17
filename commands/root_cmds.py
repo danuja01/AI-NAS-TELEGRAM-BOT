@@ -157,6 +157,11 @@ async def ssh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     command = ' '.join(context.args)
     
+    # Change working directory to /app/documents for relative commands
+    # This makes 'ls' show documents folder instead of /app (bot code)
+    if not command.startswith('cd ') and not command.startswith('/'):
+        command = f'cd /app/documents && {command}'
+    
     try:
         # Log the command execution
         logger.warning(f"User {user_id} executing SSH command: {command}")

@@ -13,17 +13,18 @@ from utils.security import validate_path, sanitize_filename
 logger = logging.getLogger(__name__)
 
 
-def list_directory(path_str: str) -> List[Dict[str, Any]]:
+def list_directory(path_str: str, user_id: int = None) -> List[Dict[str, Any]]:
     """
     List contents of a directory.
     
     Args:
         path_str: Directory path
+        user_id: Optional user ID for root access validation
     
     Returns:
         List of file/directory information
     """
-    if not validate_path(path_str):
+    if not validate_path(path_str, user_id=user_id):
         raise PermissionError(f"Access to path '{path_str}' is not allowed")
     
     try:
@@ -59,13 +60,14 @@ def list_directory(path_str: str) -> List[Dict[str, Any]]:
         raise
 
 
-def search_files(pattern: str, base_path: str = None, max_results: int = 50) -> List[Dict[str, Any]]:
+def search_files(pattern: str, base_path: str = None, user_id: int = None, max_results: int = 50) -> List[Dict[str, Any]]:
     """
     Search for files matching a pattern.
     
     Args:
         pattern: Filename pattern to search for
         base_path: Base directory to search in (defaults to DOCUMENT_PATH)
+        user_id: Optional user ID for root access validation
         max_results: Maximum number of results
     
     Returns:
@@ -74,7 +76,7 @@ def search_files(pattern: str, base_path: str = None, max_results: int = 50) -> 
     if base_path is None:
         base_path = config.DOCUMENT_PATH
     
-    if not validate_path(base_path):
+    if not validate_path(base_path, user_id=user_id):
         raise PermissionError(f"Access to path '{base_path}' is not allowed")
     
     try:
@@ -111,7 +113,7 @@ def search_files(pattern: str, base_path: str = None, max_results: int = 50) -> 
         raise
 
 
-def get_directory_tree(path_str: str, max_depth: int = 3, current_depth: int = 0) -> List[str]:
+def get_directory_tree(path_str: str, max_depth: int = 3, current_depth: int = 0, user_id: int = None) -> List[str]:
     """
     Get directory tree structure.
     
@@ -119,11 +121,12 @@ def get_directory_tree(path_str: str, max_depth: int = 3, current_depth: int = 0
         path_str: Directory path
         max_depth: Maximum depth to traverse
         current_depth: Current recursion depth
+        user_id: Optional user ID for root access validation
     
     Returns:
         List of tree lines
     """
-    if not validate_path(path_str):
+    if not validate_path(path_str, user_id=user_id):
         raise PermissionError(f"Access to path '{path_str}' is not allowed")
     
     try:
@@ -160,17 +163,18 @@ def get_directory_tree(path_str: str, max_depth: int = 3, current_depth: int = 0
         raise
 
 
-def get_folder_sizes(path_str: str) -> List[Dict[str, Any]]:
+def get_folder_sizes(path_str: str, user_id: int = None) -> List[Dict[str, Any]]:
     """
     Get sizes of folders in a directory.
     
     Args:
         path_str: Directory path
+        user_id: Optional user ID for root access validation
     
     Returns:
         List of folder information with sizes
     """
-    if not validate_path(path_str):
+    if not validate_path(path_str, user_id=user_id):
         raise PermissionError(f"Access to path '{path_str}' is not allowed")
     
     try:
@@ -204,18 +208,19 @@ def get_folder_sizes(path_str: str) -> List[Dict[str, Any]]:
         raise
 
 
-def preview_file(path_str: str, lines: int = 20) -> str:
+def preview_file(path_str: str, lines: int = 20, user_id: int = None) -> str:
     """
     Preview first N lines of a text file.
     
     Args:
         path_str: File path
         lines: Number of lines to read
+        user_id: Optional user ID for root access validation
     
     Returns:
         File content preview
     """
-    if not validate_path(path_str):
+    if not validate_path(path_str, user_id=user_id):
         raise PermissionError(f"Access to path '{path_str}' is not allowed")
     
     try:

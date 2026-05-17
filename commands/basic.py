@@ -79,7 +79,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 **📁 File System**
 `/files` - Browse default document path
-`/ls <path>` - List directory contents
+`/ls [path]` - List directory with numbered files
+`/download <number>` - Download file from list
+`/uploadfile [subfolder]` - Upload file (requires root)
 `/find <filename>` - Search for files
 `/tree [path]` - Show directory tree
 `/storage` - Storage usage summary
@@ -117,6 +119,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • After /docker, you can say "restart the first one"
 • Use /clear to start a fresh conversation
 • Root access grants full file system access - use with caution!
+• `/ls DANUJA` shows /app/documents/DANUJA/ contents
+• `/ssh ls` shows documents folder by default
 """
     
     await update.message.reply_text(help_msg, parse_mode='Markdown')

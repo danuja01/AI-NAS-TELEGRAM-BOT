@@ -244,6 +244,55 @@ def format_file_list(files: List[Dict[str, Any]], path: str) -> str:
     return msg
 
 
+def format_file_list_numbered(files: List[Dict[str, Any]], path: str) -> str:
+    """
+    Format file listing with numbered emojis for downloads.
+    
+    Directories are shown without numbers.
+    Files are numbered with emoji digits (1️⃣-🔟) or plain numbers (11+).
+    """
+    number_emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+    
+    msg = f"📁 **{path}**\n\n"
+    
+    if not files:
+        msg += "_Empty directory_\n"
+        return msg
+    
+    # Separate directories and files
+    dirs = [f for f in files if f.get('is_dir')]
+    files_list = [f for f in files if not f.get('is_dir')]
+    
+    # Show directories first (without numbers)
+    if dirs:
+        msg += "**Directories:**\n"
+        for d in dirs[:10]:  # Limit to 10 dirs
+            msg += f"📁 `{d.get('name')}`\n"
+        if len(dirs) > 10:
+            msg += f"_...and {len(dirs) - 10} more directories_\n"
+        msg += "\n"
+    
+    # Show files with numbers
+    if files_list:
+        msg += "**Files:**\n"
+        for idx, f in enumerate(files_list[:20]):  # Limit to 20 files
+            # Use emoji for 1-10, plain number for 11+
+            if idx < 10:
+                number = number_emojis[idx]
+            else:
+                number = f"{idx + 1}."
+            
+            size = format_bytes(f.get('size', 0))
+            msg += f"{number} `{f.get('name')}` ({size})\n"
+        
+        if len(files_list) > 20:
+            msg += f"\n_...and {len(files_list) - 20} more files_\n"
+        
+        msg += "\n💡 Use `/download <number>` to download a file\n"
+    
+    return msg
+
+
 def format_health_score(score: int, issues: List[str]) -> str:
     """Format system health score."""
     if score >= 90:

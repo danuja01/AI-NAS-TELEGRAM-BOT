@@ -4,9 +4,22 @@ Service management module for systemd services and system operations.
 
 import subprocess
 import logging
+import shutil
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def is_systemctl_available() -> bool:
+    """
+    Check if systemctl is available on the system.
+    
+    Returns False when running in Docker containers or systems without systemd.
+    
+    Returns:
+        True if systemctl command is available
+    """
+    return shutil.which('systemctl') is not None
 
 
 def restart_service(service_name: str) -> bool:
@@ -50,6 +63,15 @@ def get_service_status(service_name: str) -> Dict[str, Any]:
     Returns:
         Dictionary with service status information
     """
+    # Check if systemctl is available (not in Docker container)
+    if not is_systemctl_available():
+        return {
+            'name': service_name,
+            'active': False,
+            'state': 'unavailable',
+            'error': 'systemctl not available (running in container)'
+        }
+    
     try:
         result = subprocess.run(
             ['systemctl', 'status', service_name],
@@ -94,6 +116,11 @@ def list_common_services() -> List[Dict[str, Any]]:
     Returns:
         List of service information
     """
+    # Check if systemctl is available
+    if not is_systemctl_available():
+        logger.info("Running in container environment - systemctl not available")
+        return []
+    
     common_services = [
         'docker',
         'nginx',

@@ -33,8 +33,10 @@ services:
       - ./data:/app/data
       # Logs directory
       - ./logs:/app/logs
-      # Documents directory (for RAG)
-      - ${DOCUMENT_PATH:-./documents}:/app/documents:ro
+      # Documents directory (for RAG) - read-write for uploads
+      - ${DOCUMENT_PATH:-./documents}:/app/documents
+      # Docker socket for container management
+      - /var/run/docker.sock:/var/run/docker.sock
       # Optional: Mount .env file
       - ./.env:/app/.env:ro
     

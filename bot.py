@@ -97,6 +97,8 @@ def main():
     application.add_handler(CommandHandler("find", filesystem.find_command))
     application.add_handler(CommandHandler("tree", filesystem.tree_command))
     application.add_handler(CommandHandler("storage", filesystem.storage_command))
+    application.add_handler(CommandHandler("download", filesystem.download_command))
+    application.add_handler(CommandHandler("uploadfile", filesystem.upload_command))
     
     # Register command handlers - Service Management
     application.add_handler(CommandHandler("services", service.services_command))
