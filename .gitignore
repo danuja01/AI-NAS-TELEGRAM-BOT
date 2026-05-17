@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Environment
+.env
+
+# Logs
+logs/*.log
+*.log
+
+# Database
+data/*.db
+data/*.db-journal
+
+# ChromaDB
+data/chroma_db/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Model cache (sentence-transformers)
+*.cache
+.cache/
+
+.DS_Store

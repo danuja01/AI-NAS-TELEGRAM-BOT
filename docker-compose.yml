@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  nas-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nas-telegram-bot
+    restart: unless-stopped
+    
+    # Environment variables (alternative to .env file)
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ALLOWED_USER_IDS=${ALLOWED_USER_IDS}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-gpt-5.4-nano}
+      - THINKING_MODEL=${THINKING_MODEL:-o3}
+      - FALLBACK_MODEL=${FALLBACK_MODEL:-gpt-5.4-mini}
+      - SERPER_API_KEY=${SERPER_API_KEY:-}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - ROOT_PASSWORD=${ROOT_PASSWORD:-}
+      - DOCUMENT_PATH=/app/documents
+      - ALLOWED_PATHS=/app/documents,/app/data
+      - DATABASE_PATH=/app/data/bot.db
+      - CHROMA_PATH=/app/data/chroma_db
+      - LOG_FILE=/app/logs/bot.log
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CONVERSATION_HISTORY_LENGTH=${CONVERSATION_HISTORY_LENGTH:-10}
+    
+    # Mount volumes for persistent data
+    volumes:
+      # Data directory (database, chroma, etc.)
+      - ./data:/app/data
+      # Logs directory
+      - ./logs:/app/logs
+      # Documents directory (for RAG)
+      - ${DOCUMENT_PATH:-./documents}:/app/documents:ro
+      # Optional: Mount .env file
+      - ./.env:/app/.env:ro
+    
+    # Optional: Network configuration
+    # networks:
+    #   - nas-network
+    
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Optional: Define custom network
+# networks:
+#   nas-network:
+#     driver: bridge

@@ -1,0 +1,122 @@
+"""
+Basic command handlers for the NAS Telegram AI Assistant.
+Includes /start and /help commands.
+"""
+
+import logging
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from utils.security import require_auth, rate_limit
+
+logger = logging.getLogger(__name__)
+
+
+@require_auth
+@rate_limit
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start command - Welcome message."""
+    user = update.effective_user
+    
+    welcome_msg = f"""
+👋 **Welcome to NAS AI Assistant, {user.first_name}!**
+
+I'm your private DevOps and AI assistant for managing your NAS. I can help you with:
+
+🖥 **System Monitoring**
+Monitor CPU, RAM, disk, temperatures, and system health
+
+🐳 **Docker Management**
+Control and monitor your Docker containers
+
+📁 **File System**
+Browse, search, and manage files safely
+
+⚙️ **Services**
+Manage system services, reboot, shutdown
+
+🤖 **AI Assistant**
+Ask questions about your documents using RAG
+Search the internet for current information
+
+📊 **Alerts**
+Automatic notifications for system issues
+
+Use /help to see all available commands.
+"""
+    
+    await update.message.reply_text(welcome_msg, parse_mode='Markdown')
+    logger.info(f"User {user.id} started the bot")
+
+
+@require_auth
+@rate_limit
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /help command - Show all available commands."""
+    
+    help_msg = """
+📚 **Available Commands**
+
+**📊 Monitoring**
+`/status` - Comprehensive system overview
+`/cpu` - CPU usage and load
+`/ram` - Memory statistics
+`/disk` - Disk usage
+`/temps` - Temperature sensors
+`/network` - Network statistics
+`/uptime` - System uptime
+`/health` - System health score
+`/smart` - Drive health (SMART data)
+`/drives` - List all drives
+
+**🐳 Docker**
+`/docker` - List all containers
+`/containers` - Alias for /docker
+`/restart <name>` - Restart a container
+`/stop <name>` - Stop a container
+`/start <name>` - Start a container
+`/logs <name> [lines]` - View container logs
+
+**📁 File System**
+`/files` - Browse default document path
+`/ls <path>` - List directory contents
+`/find <filename>` - Search for files
+`/tree [path]` - Show directory tree
+`/storage` - Storage usage summary
+
+**⚙️ Services**
+`/services` - List system services
+`/restart_service <name>` - Restart a service
+`/reboot` - Reboot the system (requires confirmation)
+`/shutdown` - Shutdown the system (requires confirmation)
+
+**🤖 AI Assistant**
+`/ask <question>` - Ask about your documents (RAG)
+`/chat <message>` - General AI chat
+`/summarize <topic>` - Summarize documents
+`/explain <term>` - Explain from documents
+`/analyze <text>` - Deep analysis (uses o1-mini)
+`/think <question>` - Complex reasoning
+`/websearch <query>` - Search the internet
+`/index` - Re-index documents (admin only)
+`/clear` - Clear conversation history
+
+**🔐 Root Access**
+`/rootlogin <password>` - Temporary root access (30min)
+`/rootstatus` - Check root session status
+`/rootlogout` - End root session
+
+**ℹ️ General**
+`/start` - Welcome message
+`/help` - Show this help message
+
+**💡 Tips:**
+• Follow-up questions work naturally - I remember context!
+• After /cpu, you can ask "why is it high?"
+• After /docker, you can say "restart the first one"
+• Use /clear to start a fresh conversation
+• Root access grants full file system access - use with caution!
+"""
+    
+    await update.message.reply_text(help_msg, parse_mode='Markdown')
+    logger.info(f"Help command used by user {update.effective_user.id}")

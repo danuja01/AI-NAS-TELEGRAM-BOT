@@ -1,0 +1,111 @@
+"""
+Database models and schema for the NAS Telegram AI Assistant.
+Uses SQLite for storing conversations, commands, preferences, and alerts.
+"""
+
+import aiosqlite
+import logging
+from pathlib import Path
+from datetime import datetime
+
+import config
+
+logger = logging.getLogger(__name__)
+
+DATABASE_SCHEMA = """
+-- Conversations table
+CREATE TABLE IF NOT EXISTS conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    role TEXT NOT NULL,  -- 'user' or 'assistant'
+    message TEXT NOT NULL,
+    command_output TEXT,  -- Stores structured command outputs
+    metadata TEXT  -- JSON metadata
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_timestamp ON conversations(timestamp);
+
+-- Command history table
+CREATE TABLE IF NOT EXISTS command_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    command TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    output_summary TEXT,
+    success BOOLEAN DEFAULT TRUE
+);
+
+CREATE INDEX IF NOT EXISTS idx_command_history_user_id ON command_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_command_history_timestamp ON command_history(timestamp);
+
+-- User preferences table
+CREATE TABLE IF NOT EXISTS preferences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_preferences_user_id ON preferences(user_id);
+
+-- Alerts table
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,  -- 'disk', 'cpu', 'temperature', 'docker', 'smart'
+    severity TEXT NOT NULL,  -- 'info', 'warning', 'critical'
+    message TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    acknowledged BOOLEAN DEFAULT FALSE,
+    acknowledged_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp);
+CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged);
+"""
+
+
+async def init_database():
+    """Initialize the database with schema."""
+    try:
+        db_path = Path(config.DATABASE_PATH)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        db = await aiosqlite.connect(
+            config.DATABASE_PATH,
+            check_same_thread=False
+        )
+        await db.executescript(DATABASE_SCHEMA)
+        await db.commit()
+        await db.close()
+        
+        logger.info(f"Database initialized at {config.DATABASE_PATH}")
+    
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}", exc_info=True)
+        raise
+
+
+async def get_db():
+    """
+    Get a new database connection.
+    Always returns a fresh connection with proper settings.
+    Caller is responsible for closing the connection.
+    """
+    try:
+        db = await aiosqlite.connect(
+            config.DATABASE_PATH,
+            check_same_thread=False,
+            timeout=30.0,
+            isolation_level=None  # Enable autocommit mode for better concurrency
+        )
+        # Enable WAL mode for better concurrency
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA busy_timeout=30000")  # 30 second busy timeout
+        return db
+    except Exception as e:
+        logger.error(f"Failed to get database connection: {e}")
+        raise

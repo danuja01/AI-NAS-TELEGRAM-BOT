@@ -1,0 +1,348 @@
+"""
+Memory management for conversations and command history.
+Implements conversation history retrieval for context-aware responses.
+"""
+
+import json
+import logging
+import aiosqlite
+from datetime import datetime
+from typing import List, Dict, Any, Optional
+
+import config
+from database.models import get_db
+
+logger = logging.getLogger(__name__)
+
+
+async def save_conversation(
+    user_id: int,
+    role: str,
+    message: str,
+    command_output: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None
+):
+    """
+    Save a conversation message.
+    
+    Args:
+        user_id: Telegram user ID
+        role: 'user' or 'assistant'
+        message: The message content
+        command_output: Optional command output (for context)
+        metadata: Optional metadata dictionary
+    """
+    db = None
+    try:
+        db = await get_db()
+        metadata_json = json.dumps(metadata) if metadata else None
+        
+        await db.execute(
+            """
+            INSERT INTO conversations (user_id, role, message, command_output, metadata)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (user_id, role, message, command_output, metadata_json)
+        )
+        await db.commit()
+        
+        logger.debug(f"Saved conversation for user {user_id}: {role}")
+    
+    except Exception as e:
+        logger.error(f"Failed to save conversation: {e}")
+    finally:
+        if db:
+            await db.close()
+
+
+async def get_recent_context(user_id: int, limit: int = None) -> List[Dict[str, Any]]:
+    """
+    Get recent conversation history for a user.
+    
+    Args:
+        user_id: Telegram user ID
+        limit: Maximum number of messages (defaults to config.CONVERSATION_HISTORY_LENGTH)
+    
+    Returns:
+        List of conversation messages with metadata
+    """
+    if limit is None:
+        limit = config.CONVERSATION_HISTORY_LENGTH
+    
+    db = None
+    try:
+        db = await get_db()
+        db.row_factory = aiosqlite.Row
+        
+        cursor = await db.execute(
+            """
+            SELECT id, role, message, command_output, metadata, timestamp
+            FROM conversations
+            WHERE user_id = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            (user_id, limit)
+        )
+        
+        rows = await cursor.fetchall()
+        
+        # Reverse to get chronological order
+        messages = []
+        for row in reversed(rows):
+            msg = {
+                'id': row['id'],
+                'role': row['role'],
+                'message': row['message'],
+                'command_output': row['command_output'],
+                'timestamp': row['timestamp']
+            }
+            
+            if row['metadata']:
+                try:
+                    msg['metadata'] = json.loads(row['metadata'])
+                except:
+                    pass
+            
+            messages.append(msg)
+        
+        return messages
+    
+    except Exception as e:
+        logger.error(f"Failed to get recent context: {e}")
+        return []
+    finally:
+        if db:
+            await db.close()
+
+
+async def build_context_string(user_id: int, limit: int = None) -> str:
+    """
+    Build a formatted context string from recent conversation history.
+    Used for RAG queries to provide conversation context.
+    
+    Args:
+        user_id: Telegram user ID
+        limit: Maximum number of messages to include
+    
+    Returns:
+        Formatted context string
+    """
+    messages = await get_recent_context(user_id, limit)
+    
+    if not messages:
+        return ""
+    
+    context_parts = ["Recent conversation context:"]
+    
+    for msg in messages:
+        role_label = "You" if msg['role'] == 'user' else "Assistant"
+        context_parts.append(f"{role_label}: {msg['message']}")
+        
+        # Include command output if available
+        if msg.get('command_output'):
+            context_parts.append(f"[Command Output]: {msg['command_output']}")
+    
+    return "\n".join(context_parts)
+
+
+async def clear_conversation_history(user_id: int):
+    """
+    Clear conversation history for a user.
+    
+    Args:
+        user_id: Telegram user ID
+    """
+    try:
+        async with await get_db() as db:
+            await db.execute(
+                "DELETE FROM conversations WHERE user_id = ?",
+                (user_id,)
+            )
+            await db.commit()
+        
+        logger.info(f"Cleared conversation history for user {user_id}")
+    
+    except Exception as e:
+        logger.error(f"Failed to clear conversation history: {e}")
+
+
+async def save_command(user_id: int, command: str, output_summary: str = None, success: bool = True):
+    """
+    Save command execution to history.
+    
+    Args:
+        user_id: Telegram user ID
+        command: The command that was executed
+        output_summary: Brief summary of the output
+        success: Whether the command succeeded
+    """
+    db = None
+    try:
+        db = await get_db()
+        await db.execute(
+            """
+            INSERT INTO command_history (user_id, command, output_summary, success)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, command, output_summary, success)
+        )
+        await db.commit()
+        
+        logger.debug(f"Saved command history for user {user_id}: {command}")
+    
+    except Exception as e:
+        logger.error(f"Failed to save command history: {e}")
+    finally:
+        if db:
+            await db.close()
+
+
+async def get_command_history(user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+    """
+    Get recent command history for a user.
+    
+    Args:
+        user_id: Telegram user ID
+        limit: Maximum number of commands to retrieve
+    
+    Returns:
+        List of command history entries
+    """
+    try:
+        async with await get_db() as db:
+            db.row_factory = aiosqlite.Row
+            
+            cursor = await db.execute(
+                """
+                SELECT command, output_summary, success, timestamp
+                FROM command_history
+                WHERE user_id = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (user_id, limit)
+            )
+            
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    except Exception as e:
+        logger.error(f"Failed to get command history: {e}")
+        return []
+
+
+async def get_user_preferences(user_id: int) -> Dict[str, str]:
+    """
+    Get user preferences.
+    
+    Args:
+        user_id: Telegram user ID
+    
+    Returns:
+        Dictionary of preferences
+    """
+    try:
+        async with await get_db() as db:
+            db.row_factory = aiosqlite.Row
+            
+            cursor = await db.execute(
+                "SELECT key, value FROM preferences WHERE user_id = ?",
+                (user_id,)
+            )
+            
+            rows = await cursor.fetchall()
+            return {row['key']: row['value'] for row in rows}
+    
+    except Exception as e:
+        logger.error(f"Failed to get user preferences: {e}")
+        return {}
+
+
+async def set_user_preference(user_id: int, key: str, value: str):
+    """
+    Set a user preference.
+    
+    Args:
+        user_id: Telegram user ID
+        key: Preference key
+        value: Preference value
+    """
+    try:
+        async with await get_db() as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO preferences (user_id, key, value, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (user_id, key, value)
+            )
+            await db.commit()
+    
+    except Exception as e:
+        logger.error(f"Failed to set user preference: {e}")
+
+
+async def save_alert(alert_type: str, severity: str, message: str):
+    """
+    Save an alert to the database.
+    
+    Args:
+        alert_type: Type of alert
+        severity: Alert severity level
+        message: Alert message
+    """
+    try:
+        async with await get_db() as db:
+            await db.execute(
+                """
+                INSERT INTO alerts (type, severity, message)
+                VALUES (?, ?, ?)
+                """,
+                (alert_type, severity, message)
+            )
+            await db.commit()
+    
+    except Exception as e:
+        logger.error(f"Failed to save alert: {e}")
+
+
+async def get_unacknowledged_alerts() -> List[Dict[str, Any]]:
+    """Get all unacknowledged alerts."""
+    try:
+        async with await get_db() as db:
+            db.row_factory = aiosqlite.Row
+            
+            cursor = await db.execute(
+                """
+                SELECT id, type, severity, message, timestamp
+                FROM alerts
+                WHERE acknowledged = FALSE
+                ORDER BY timestamp DESC
+                """
+            )
+            
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    except Exception as e:
+        logger.error(f"Failed to get unacknowledged alerts: {e}")
+        return []
+
+
+async def acknowledge_alert(alert_id: int):
+    """Mark an alert as acknowledged."""
+    try:
+        async with await get_db() as db:
+            await db.execute(
+                """
+                UPDATE alerts
+                SET acknowledged = TRUE, acknowledged_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (alert_id,)
+            )
+            await db.commit()
+    
+    except Exception as e:
+        logger.error(f"Failed to acknowledge alert: {e}")
