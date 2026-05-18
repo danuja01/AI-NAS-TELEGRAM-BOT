@@ -63,6 +63,8 @@ def check_temperature_alerts(temps: Dict[str, float]) -> List[Dict[str, Any]]:
     alerts = []
     
     for sensor, temp in temps.items():
+        if config.ignore_temperature_sensor_for_alerts(sensor):
+            continue
         if temp and temp > config.ALERT_THRESHOLDS['temperature_celsius']:
             severity = 'critical' if temp > 80 else 'warning'
             alerts.append({

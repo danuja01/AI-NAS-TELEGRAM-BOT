@@ -8,6 +8,8 @@ import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 
+import config
+
 
 def escape_telegram_html(value: Any) -> str:
     """Escape dynamic text for Telegram HTML parse mode."""
@@ -173,7 +175,10 @@ def format_temperature_stats(temp_stats: Dict[str, Any]) -> str:
 
     for sensor, temp in temp_stats.items():
         if temp is not None:
-            icon = "🔥" if temp > 70 else "⚠️" if temp > 60 else "✅"
+            if config.ignore_temperature_sensor_for_alerts(sensor):
+                icon = "ℹ️"
+            else:
+                icon = "🔥" if temp > 70 else "⚠️" if temp > 60 else "✅"
             msg += f"{icon} <b>{_h(sensor)}:</b> {temp:.1f}°C\n"
 
     return msg

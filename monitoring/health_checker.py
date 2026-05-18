@@ -85,7 +85,11 @@ async def record_metrics_sample():
         cpu = get_cpu_stats()
         mem = get_memory_stats()
         temps = get_temperatures() or {}
-        temp_vals = [float(t) for t in temps.values() if t is not None]
+        temp_vals = [
+            float(t)
+            for sk, t in temps.items()
+            if t is not None and not config.ignore_temperature_sensor_for_alerts(sk)
+        ]
         temp_max = max(temp_vals) if temp_vals else None
         disks = get_disk_stats() or []
         free_pcts: List[float] = []

@@ -9,6 +9,8 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
+import config
+
 logger = logging.getLogger(__name__)
 
 
@@ -221,6 +223,8 @@ def calculate_health_score() -> tuple[int, List[str]]:
         if hasattr(psutil, 'sensors_temperatures'):
             sensors = psutil.sensors_temperatures()
             for name, entries in sensors.items():
+                if config.ignore_temperature_sensor_for_alerts(name):
+                    continue
                 for entry in entries:
                     if entry.current and entry.current > 80:
                         score -= 15

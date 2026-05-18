@@ -77,6 +77,26 @@ ALERT_THRESHOLDS = {
     "memory_percent": 95,  # Alert if > 95%
 }
 
+# psutil sensor keys (substring match, case-insensitive) excluded from temperature alerts,
+# health-score temp penalties, and digest temp_max. Comma-separated env override; empty
+# env clears the list. Default drops dell_smm (often bogus highs on Dell systems).
+_temp_ignore_env = os.getenv("TEMPERATURE_ALERT_IGNORE")
+if _temp_ignore_env is None:
+    TEMPERATURE_ALERT_IGNORE_SUBSTRINGS: tuple[str, ...] = ("dell_smm",)
+else:
+    TEMPERATURE_ALERT_IGNORE_SUBSTRINGS = tuple(
+        s.strip().lower() for s in _temp_ignore_env.split(",") if s.strip()
+    )
+
+
+def ignore_temperature_sensor_for_alerts(sensor_key: str) -> bool:
+    """True if this sensor label/chip should not drive alerts or temp rollups."""
+    if not sensor_key or not TEMPERATURE_ALERT_IGNORE_SUBSTRINGS:
+        return False
+    k = str(sensor_key).lower()
+    return any(substr in k for substr in TEMPERATURE_ALERT_IGNORE_SUBSTRINGS)
+
+
 # Health Check Interval (minutes)
 HEALTH_CHECK_INTERVAL = 5
 
