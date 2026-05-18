@@ -1,0 +1,49 @@
+start - Welcome message
+help - Show all available commands
+
+status - System overview
+cpu - CPU usage and load
+ram - Memory statistics
+disk - Disk usage
+temps - Temperature sensors
+network - Network statistics
+uptime - System uptime
+health - System health score
+smart - Drive health (SMART data)
+drives - List all drives
+
+docker - List all containers
+containers - List all containers
+restart - Restart a container
+stop - Stop a container
+start - Start a container
+logs - View container logs
+
+files - Browse default document path
+ls - List directory with numbered files
+download - Download file(s) from list
+uploadfile - Upload file (requires root)
+find - Search for files
+tree - Show directory tree
+storage - Storage usage summary
+cd - Change working directory (requires root)
+
+services - List system services
+restart_service - Restart a service
+reboot - Reboot the system
+shutdown - Shutdown the system
+
+ask - Ask about your documents (RAG)
+chat - General AI chat
+summarize - Summarize documents
+explain - Explain from documents
+analyze - Deep analysis (uses o3-mini)
+think - Complex reasoning
+websearch - Search the internet
+index - Re-index documents
+clear - Clear conversation history
+
+rootlogin - Temporary root access (30min)
+rootstatus - Check root session status
+rootlogout - End root session
+ssh - Execute shell commands (requires root)
