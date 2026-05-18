@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 
 
+def _model_ignores_temperature(model: str) -> bool:
+    """Reasoning models (o1/o3) reject the temperature parameter on the Chat Completions API."""
+    m = (model or "").lower().strip()
+    return m.startswith("o1") or m.startswith("o3")
+
+
 async def generate(
     prompt: str,
     context: str = "",
@@ -63,12 +69,14 @@ async def generate(
         logger.info(f"Generating with model: {model}")
         
         # ALL modern OpenAI models (GPT-5, o3) use max_completion_tokens
-        response = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_completion_tokens=max_tokens
-        )
+        create_kwargs: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "max_completion_tokens": max_tokens,
+        }
+        if not _model_ignores_temperature(model):
+            create_kwargs["temperature"] = temperature
+        response = await client.chat.completions.create(**create_kwargs)
         
         return response.choices[0].message.content
     
@@ -159,13 +167,15 @@ async def generate_stream(
         messages.append({"role": "user", "content": prompt})
         
         # Use max_completion_tokens for all modern models
-        stream = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            temperature=0.7,
-            max_completion_tokens=2000
-        )
+        stream_kwargs: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "max_completion_tokens": 2000,
+        }
+        if not _model_ignores_temperature(model):
+            stream_kwargs["temperature"] = 0.7
+        stream = await client.chat.completions.create(**stream_kwargs)
         
         async for chunk in stream:
             if chunk.choices[0].delta.content:
