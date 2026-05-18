@@ -4,10 +4,11 @@ Service management command handlers.
 
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CallbackQueryHandler
+from telegram.ext import ContextTypes
 
 from utils.security import require_auth, rate_limit
 from utils.formatters import format_error, format_success
+from utils.followup_state import set_cmd_pending_exclusive, FOLLOWUP_RESTART_SERVICE
 from services.service_manager import (
     restart_service, get_service_status, list_common_services,
     reboot_system, shutdown_system
@@ -15,6 +16,12 @@ from services.service_manager import (
 from database.memory import save_conversation, save_command
 
 logger = logging.getLogger(__name__)
+
+_CMD_HINT_RESTART_SERVICE = (
+    "You used /restart_service without a service name.\n\n"
+    "Send your **next message** as the systemd service name, or `/cancel` to abort.\n\n"
+    "Example: `nginx`"
+)
 
 
 @require_auth
@@ -60,41 +67,42 @@ async def services_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(format_error(f"Failed to list services: {e}"))
 
 
+async def send_restart_service_confirmation(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, service_name: str
+):
+    """Show inline confirm for restarting a systemd service (from /restart_service or follow-up)."""
+    try:
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Confirm", callback_data=f"restart_svc_{service_name}"),
+                InlineKeyboardButton("❌ Cancel", callback_data="cancel"),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            f"⚠️ Restart service `{service_name}`?",
+            reply_markup=reply_markup,
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        logger.error(f"Error in send_restart_service_confirmation: {e}", exc_info=True)
+        await update.message.reply_text(format_error(str(e)))
+
+
 @require_auth
 @rate_limit
 async def restart_service_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /restart_service <name> command - Restart a systemd service."""
     user_id = update.effective_user.id
-    
+
     if not context.args:
-        await update.message.reply_text(
-            "❌ Usage: `/restart_service <service_name>`\n\n"
-            "Example: `/restart_service nginx`",
-            parse_mode='Markdown'
-        )
+        set_cmd_pending_exclusive(context, FOLLOWUP_RESTART_SERVICE)
+        await update.message.reply_text(_CMD_HINT_RESTART_SERVICE, parse_mode="Markdown")
         return
-    
+
     service_name = context.args[0]
-    
-    try:
-        # Send confirmation
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Confirm", callback_data=f"restart_svc_{service_name}"),
-                InlineKeyboardButton("❌ Cancel", callback_data="cancel")
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            f"⚠️ Restart service `{service_name}`?",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in restart_service_command: {e}", exc_info=True)
-        await update.message.reply_text(format_error(str(e)))
+    await send_restart_service_confirmation(update, context, user_id, service_name)
 
 
 @require_auth

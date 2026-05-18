@@ -14,9 +14,26 @@ from telegram.ext import ContextTypes
 from utils.security import require_auth, rate_limit
 from utils.formatters import format_success, format_error
 from utils.root_session import RootSessionManager
+from utils.followup_state import (
+    set_cmd_pending_exclusive,
+    FOLLOWUP_ROOTLOGIN,
+    FOLLOWUP_SSH,
+)
 from database.memory import save_command
 
 logger = logging.getLogger(__name__)
+
+_CMD_HINT_ROOTLOGIN = (
+    "You used /rootlogin without a password.\n\n"
+    "Send your **next message** as the root password, or /cancel to abort.\n\n"
+    "⚠️ For security, prefer typing `/rootlogin yourpassword` in one line in **private chat**; "
+    "the bot will try to delete your message afterward."
+)
+
+_CMD_HINT_SSH = (
+    "You used /ssh without a command.\n\n"
+    "Send your **next message** as the shell command to run (root session required), or /cancel."
+)
 
 
 async def _try_delete_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -41,21 +58,21 @@ async def _try_delete_user_message(update: Update, context: ContextTypes.DEFAULT
 async def rootlogin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /rootlogin <password> - Activate temporary root access."""
     user_id = update.effective_user.id
-    
+
     if not context.args:
-        await update.message.reply_text(
-            "❌ Usage: `/rootlogin <password>`\n\n"
-            "⚠️ Root access grants full file system access for 30 minutes.\n"
-            "All root actions are logged for security audit.\n\n"
-            "In private chat, your password message is deleted after this runs when Telegram allows it.",
-            parse_mode='Markdown'
-        )
+        set_cmd_pending_exclusive(context, FOLLOWUP_ROOTLOGIN)
+        await update.message.reply_text(_CMD_HINT_ROOTLOGIN, parse_mode="Markdown")
         return
-    
-    password = ' '.join(context.args)
-    
+
+    password = " ".join(context.args)
+    await run_rootlogin_attempt(update, context, user_id, password)
+
+
+async def run_rootlogin_attempt(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, password: str
+):
+    """Run root login flow (from /rootlogin args or follow-up message)."""
     try:
-        # Attempt authentication
         if RootSessionManager.authenticate(user_id, password):
             await update.message.reply_text(
                 format_success(
@@ -66,8 +83,8 @@ async def rootlogin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "Use `/rootlogout` to end session early."
                 )
             )
-            await save_command(user_id, '/rootlogin', 'Root access granted')
-            logger.warning(f"User {user_id} gained root access")
+            await save_command(user_id, "/rootlogin", "Root access granted")
+            logger.warning("User %s gained root access", user_id)
         else:
             await update.message.reply_text(
                 format_error(
@@ -75,11 +92,11 @@ async def rootlogin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "Invalid password. This incident has been logged."
                 )
             )
-            await save_command(user_id, '/rootlogin', 'Failed - invalid password')
-            logger.warning(f"Failed root login attempt by user {user_id}")
-    
+            await save_command(user_id, "/rootlogin", "Failed - invalid password")
+            logger.warning("Failed root login attempt by user %s", user_id)
+
     except Exception as e:
-        logger.error(f"Error in rootlogin_command: {e}", exc_info=True)
+        logger.error("Error in rootlogin_command: %s", e, exc_info=True)
         await update.message.reply_text(format_error(f"Root login failed: {e}"))
     finally:
         await _try_delete_user_message(update, context)
@@ -165,21 +182,18 @@ async def ssh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if not context.args:
-        await update.message.reply_text(
-            "❌ Usage: `/ssh <command>`\n\n"
-            "**Examples:**\n"
-            "• `/ssh ls -la`\n"
-            "• `/ssh mkdir test`\n"
-            "• `/ssh df -h`\n"
-            "• `/ssh docker ps`\n\n"
-            "⚠️ All commands are logged and executed with full privileges.",
-            parse_mode='Markdown'
-        )
+        set_cmd_pending_exclusive(context, FOLLOWUP_SSH)
+        await update.message.reply_text(_CMD_HINT_SSH, parse_mode="Markdown")
         return
-    
-    command = ' '.join(context.args)
-    
-    # Change working directory to /app/documents for relative commands
+
+    command = " ".join(context.args)
+    await run_ssh_command(update, context, user_id, command)
+
+
+async def run_ssh_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, command: str
+):
+    """Execute shell via /ssh (single message or follow-up)."""
     # This makes 'ls' show documents folder instead of /app (bot code)
     if not command.startswith('cd ') and not command.startswith('/'):
         command = f'cd /app/documents && {command}'

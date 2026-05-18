@@ -27,6 +27,7 @@ from monitoring.health_checker import start_health_monitoring
 
 # Import command handlers
 from commands import basic, monitoring, docker_cmds, filesystem, ai_cmds, service, root_cmds, operations
+from commands import text_followup
 
 # Setup logging
 setup_logging()
@@ -87,6 +88,7 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("websearch", "Web search"),
     BotCommand("index", "Re-index documents"),
     BotCommand("clear", "Clear history"),
+    BotCommand("cancel", "Cancel pending AI input"),
     BotCommand("rootlogin", "Root session"),
     BotCommand("rootlogout", "End root"),
     BotCommand("rootstatus", "Root session status"),
@@ -150,6 +152,15 @@ def main():
     # Register command handlers - Basic
     application.add_handler(CommandHandler("start", basic.start_command))
     application.add_handler(CommandHandler("help", basic.help_command))
+    application.add_handler(CommandHandler("cancel", ai_cmds.cancel_pending_command))
+
+    # Plain-text follow-up for /ask, /restart without args (menu tap), etc.
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            text_followup.unified_pending_text_handler,
+        )
+    )
     
     # Register command handlers - Monitoring
     application.add_handler(CommandHandler("status", monitoring.status_command))

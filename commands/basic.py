@@ -107,6 +107,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/websearch <query>` - Search the internet
 `/index` - Re-index documents (admin only)
 `/clear` - Clear conversation history
+`/cancel` - Cancel when the bot is waiting for your next message (after /analyze, /ask, etc.)
 
 **🔐 Root Access**
 `/rootlogin <password>` - Temporary root access (30min)

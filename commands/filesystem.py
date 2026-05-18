@@ -12,6 +12,7 @@ from telegram.ext import ContextTypes
 import config
 from utils.security import require_auth, rate_limit
 from utils.formatters import format_file_list, format_file_list_numbered, format_error, format_bytes
+from utils.followup_state import set_cmd_pending_exclusive, FOLLOWUP_FIND, FOLLOWUP_DOWNLOAD
 from utils.file_cache import FileCache
 from services.file_service import (
     list_directory, search_files, get_directory_tree,
@@ -23,6 +24,19 @@ logger = logging.getLogger(__name__)
 
 # Bot API document upload limit (leave headroom under 50 MiB hard cap)
 TELEGRAM_DOCUMENT_MAX_BYTES = 49 * 1024 * 1024
+
+_CMD_HINT_FIND = (
+    "You used /find without a search term.\n\n"
+    "Send your **next message** as the filename pattern to search for, or `/cancel` to abort.\n\n"
+    "Example: `report.pdf`"
+)
+
+_CMD_HINT_DOWNLOAD = (
+    "You used /download without numbers.\n\n"
+    "Send your **next message** with one or more file numbers (from your last `/ls`), "
+    "e.g. `3` or `1 3 5` or `1-5`, or `/cancel` to abort.\n\n"
+    "First run `/ls` so files are numbered in the cache."
+)
 
 
 def parse_number_ranges(args: list) -> list:
@@ -60,6 +74,234 @@ def parse_number_ranges(args: list) -> list:
             continue
     
     return sorted(set(numbers))
+
+
+async def run_find(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, pattern: str):
+    """Search for files (from /find args or follow-up text)."""
+    try:
+        await update.message.reply_text(f"🔍 Searching for '{pattern}'...")
+
+        results = search_files(pattern, user_id=user_id)
+
+        if not results:
+            await update.message.reply_text(f"❌ No files found matching '{pattern}'")
+            return
+
+        message = f"🔍 **Search Results for '{pattern}'**\n\n"
+        message += f"Found {len(results)} file(s):\n\n"
+
+        for result in results[:20]:  # Show max 20 results
+            icon = "📁" if result["is_dir"] else "📄"
+            size = format_bytes(result["size"]) if not result["is_dir"] else ""
+            message += f"{icon} `{result['name']}` {size}\n"
+            message += f"   {result['path']}\n\n"
+
+        if len(results) > 20:
+            message += f"\n_...and {len(results) - 20} more results_"
+
+        await update.message.reply_text(message, parse_mode="Markdown")
+
+        result_summary = f"Found {len(results)} files matching '{pattern}'"
+        await save_conversation(user_id, "user", f"/find {pattern}")
+        await save_conversation(user_id, "assistant", message, command_output=result_summary)
+        await save_command(user_id, f"/find {pattern}", f"{len(results)} results")
+
+    except PermissionError as e:
+        await update.message.reply_text(format_error(str(e)))
+    except Exception as e:
+        logger.error(f"Error in run_find: {e}", exc_info=True)
+        await update.message.reply_text(format_error(f"Search failed: {e}"))
+
+
+async def run_download_from_tokens(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, tokens: list
+):
+    """Download by index tokens (from /download args split or follow-up)."""
+    try:
+        numbers = parse_number_ranges(tokens)
+
+        if not numbers:
+            await update.message.reply_text(format_error("No valid file numbers provided."))
+            return
+
+        # Check if single file or multiple files
+        if len(numbers) == 1:
+            # Single file download (existing behavior)
+            number = numbers[0]
+            file_info = FileCache.get_file(user_id, number)
+
+            if not file_info:
+                await update.message.reply_text(
+                    "❌ File not found in cache.\n\n"
+                    "Use `/ls <path>` first to list files, then use `/download <number>`.\n\n"
+                    "Note: Cache expires after 10 minutes.",
+                    parse_mode="Markdown",
+                )
+                return
+
+            file_path = file_info["path"]
+
+            # Validate path and security
+            from utils.security import validate_path
+
+            if not validate_path(file_path, user_id=user_id):
+                await update.message.reply_text(format_error("Access denied to this file."))
+                return
+
+            # Check file exists and is a regular file (not a dir / broken symlink)
+            path_obj = Path(file_path)
+            if not path_obj.is_file():
+                await update.message.reply_text(format_error("Path is not a regular file or no longer exists"))
+                return
+
+            file_size = path_obj.stat().st_size
+            if file_size > TELEGRAM_DOCUMENT_MAX_BYTES:
+                await update.message.reply_text(
+                    format_error(
+                        f"File too large for Telegram ({format_bytes(file_size)}). "
+                        f"Max is {format_bytes(TELEGRAM_DOCUMENT_MAX_BYTES)}. "
+                        "Use SSH or copy from the NAS directly for large files."
+                    )
+                )
+                return
+
+            send_name = file_info.get("name") or path_obj.name
+
+            # Send file (pass path string; PTB reads reliably; open file handles can fail on some mounts)
+            status_msg = await update.message.reply_text(
+                f"📤 Preparing to send `{send_name}`...",
+                parse_mode="Markdown",
+            )
+
+            try:
+                await update.message.reply_document(
+                    document=str(path_obj.resolve()),
+                    filename=send_name,
+                    caption=f"📄 {send_name}\nSize: {format_bytes(file_size)}",
+                )
+
+                await status_msg.delete()
+                logger.info(f"User {user_id} downloaded file: {send_name}")
+                await save_command(user_id, f"/download {number}", send_name)
+
+            except Exception as e:
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
+                logger.error(f"Single-file send failed: {e}", exc_info=True)
+                raise
+
+        else:
+            # Multiple files - create ZIP
+            files = FileCache.get_files(user_id, numbers)
+
+            if not files:
+                await update.message.reply_text(
+                    "❌ No files found in cache.\n\n"
+                    "Use `/ls <path>` first to list files, then use `/download <numbers>`.\n\n"
+                    "Note: Cache expires after 10 minutes.",
+                    parse_mode="Markdown",
+                )
+                return
+
+            # Validate all file paths
+            from utils.security import validate_path
+
+            valid_files = []
+            for file_info in files:
+                if validate_path(file_info["path"], user_id=user_id) and os.path.exists(file_info["path"]):
+                    valid_files.append(file_info)
+
+            if not valid_files:
+                await update.message.reply_text(format_error("No valid files found or access denied."))
+                return
+
+            # Show status
+            status_msg = await update.message.reply_text(
+                f"📦 Creating archive with {len(valid_files)} file(s)...",
+                parse_mode="Markdown",
+            )
+
+            try:
+                # Create temporary ZIP file
+                import tempfile
+                from datetime import datetime
+                from services.file_service import create_zip_archive
+
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                zip_filename = f"files_{timestamp}.zip"
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+                    temp_zip_path = tmp_file.name
+
+                success, zip_path, zip_size, error_msg = create_zip_archive(valid_files, temp_zip_path)
+
+                if not success:
+                    await status_msg.delete()
+                    await update.message.reply_text(format_error(f"Failed to create archive: {error_msg}"))
+                    try:
+                        os.unlink(temp_zip_path)
+                    except OSError:
+                        pass
+                    return
+
+                await status_msg.edit_text(
+                    f"📤 Sending archive ({format_bytes(zip_size)})...",
+                    parse_mode="Markdown",
+                )
+
+                if zip_size > TELEGRAM_DOCUMENT_MAX_BYTES:
+                    await status_msg.delete()
+                    await update.message.reply_text(
+                        format_error(
+                            f"Archive too large for Telegram ({format_bytes(zip_size)}). "
+                            f"Max is {format_bytes(TELEGRAM_DOCUMENT_MAX_BYTES)}. "
+                            "Download fewer files or smaller items."
+                        )
+                    )
+                    try:
+                        os.unlink(temp_zip_path)
+                    except OSError:
+                        pass
+                    return
+
+                await update.message.reply_document(
+                    document=str(Path(zip_path).resolve()),
+                    filename=zip_filename,
+                    caption=f"📦 Archive with {len(valid_files)} file(s)\nSize: {format_bytes(zip_size)}",
+                )
+
+                await status_msg.delete()
+
+                try:
+                    os.unlink(temp_zip_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete temp ZIP file: {e}")
+
+                logger.info(f"User {user_id} downloaded {len(valid_files)} files as ZIP")
+                await save_command(
+                    user_id, f'/download {" ".join(map(str, numbers))}', f"{len(valid_files)} files"
+                )
+
+            except Exception as e:
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
+                if "temp_zip_path" in locals():
+                    try:
+                        os.unlink(temp_zip_path)
+                    except OSError:
+                        pass
+                logger.error(f"Bulk download / ZIP send failed: {e}", exc_info=True)
+                raise
+
+    except ValueError as e:
+        await update.message.reply_text(format_error(f"Invalid number format: {str(e)}"))
+    except Exception as e:
+        logger.error(f"Download error: {e}", exc_info=True)
+        await update.message.reply_text(format_error(f"Download failed: {e}"))
 
 
 @require_auth
@@ -166,51 +408,14 @@ async def ls_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def find_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /find <filename> command - Search for files."""
     user_id = update.effective_user.id
-    
+
     if not context.args:
-        await update.message.reply_text(
-            "❌ Usage: `/find <filename>`\n\n"
-            "Example: `/find report.pdf`",
-            parse_mode='Markdown'
-        )
+        set_cmd_pending_exclusive(context, FOLLOWUP_FIND)
+        await update.message.reply_text(_CMD_HINT_FIND, parse_mode="Markdown")
         return
-    
-    pattern = ' '.join(context.args)
-    
-    try:
-        await update.message.reply_text(f"🔍 Searching for '{pattern}'...")
-        
-        results = search_files(pattern, user_id=user_id)
-        
-        if not results:
-            await update.message.reply_text(f"❌ No files found matching '{pattern}'")
-            return
-        
-        message = f"🔍 **Search Results for '{pattern}'**\n\n"
-        message += f"Found {len(results)} file(s):\n\n"
-        
-        for result in results[:20]:  # Show max 20 results
-            icon = "📁" if result['is_dir'] else "📄"
-            size = format_bytes(result['size']) if not result['is_dir'] else ""
-            message += f"{icon} `{result['name']}` {size}\n"
-            message += f"   {result['path']}\n\n"
-        
-        if len(results) > 20:
-            message += f"\n_...and {len(results) - 20} more results_"
-        
-        await update.message.reply_text(message, parse_mode='Markdown')
-        
-        # Save to conversation history
-        result_summary = f"Found {len(results)} files matching '{pattern}'"
-        await save_conversation(user_id, 'user', f'/find {pattern}')
-        await save_conversation(user_id, 'assistant', message, command_output=result_summary)
-        await save_command(user_id, f'/find {pattern}', f"{len(results)} results")
-        
-    except PermissionError as e:
-        await update.message.reply_text(format_error(str(e)))
-    except Exception as e:
-        logger.error(f"Error in find_command: {e}", exc_info=True)
-        await update.message.reply_text(format_error(f"Search failed: {e}"))
+
+    pattern = " ".join(context.args)
+    await run_find(update, context, user_id, pattern)
 
 
 @require_auth
@@ -295,217 +500,13 @@ async def storage_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /download <number(s)> - Download single or multiple files from last ls."""
     user_id = update.effective_user.id
-    
+
     if not context.args:
-        await update.message.reply_text(
-            "❌ Usage: `/download <number(s)>`\n\n"
-            "**Single file:** `/download 3`\n"
-            "**Multiple files:** `/download 1 3 5`\n"
-            "**Range:** `/download 1-5`\n"
-            "**Mixed:** `/download 1-3 7 10`\n\n"
-            "First use `/ls <path>` to list files with numbers.",
-            parse_mode='Markdown'
-        )
+        set_cmd_pending_exclusive(context, FOLLOWUP_DOWNLOAD)
+        await update.message.reply_text(_CMD_HINT_DOWNLOAD, parse_mode="Markdown")
         return
-    
-    try:
-        # Parse number ranges
-        numbers = parse_number_ranges(context.args)
-        
-        if not numbers:
-            await update.message.reply_text(
-                format_error("No valid file numbers provided.")
-            )
-            return
-        
-        # Check if single file or multiple files
-        if len(numbers) == 1:
-            # Single file download (existing behavior)
-            number = numbers[0]
-            file_info = FileCache.get_file(user_id, number)
-            
-            if not file_info:
-                await update.message.reply_text(
-                    "❌ File not found in cache.\n\n"
-                    "Use `/ls <path>` first to list files, then use `/download <number>`.\n\n"
-                    "Note: Cache expires after 10 minutes.",
-                    parse_mode='Markdown'
-                )
-                return
-            
-            file_path = file_info['path']
-            
-            # Validate path and security
-            from utils.security import validate_path
-            if not validate_path(file_path, user_id=user_id):
-                await update.message.reply_text(
-                    format_error("Access denied to this file.")
-                )
-                return
-            
-            # Check file exists and is a regular file (not a dir / broken symlink)
-            path_obj = Path(file_path)
-            if not path_obj.is_file():
-                await update.message.reply_text(
-                    format_error("Path is not a regular file or no longer exists")
-                )
-                return
-            
-            file_size = path_obj.stat().st_size
-            if file_size > TELEGRAM_DOCUMENT_MAX_BYTES:
-                await update.message.reply_text(
-                    format_error(
-                        f"File too large for Telegram ({format_bytes(file_size)}). "
-                        f"Max is {format_bytes(TELEGRAM_DOCUMENT_MAX_BYTES)}. "
-                        "Use SSH or copy from the NAS directly for large files."
-                    )
-                )
-                return
-            
-            send_name = file_info.get('name') or path_obj.name
-            
-            # Send file (pass path string; PTB reads reliably; open file handles can fail on some mounts)
-            status_msg = await update.message.reply_text(
-                f"📤 Preparing to send `{send_name}`...",
-                parse_mode='Markdown'
-            )
-            
-            try:
-                await update.message.reply_document(
-                    document=str(path_obj.resolve()),
-                    filename=send_name,
-                    caption=f"📄 {send_name}\nSize: {format_bytes(file_size)}"
-                )
-                
-                await status_msg.delete()
-                logger.info(f"User {user_id} downloaded file: {send_name}")
-                await save_command(user_id, f'/download {number}', send_name)
-            
-            except Exception as e:
-                try:
-                    await status_msg.delete()
-                except Exception:
-                    pass
-                logger.error(f"Single-file send failed: {e}", exc_info=True)
-                raise
-        
-        else:
-            # Multiple files - create ZIP
-            files = FileCache.get_files(user_id, numbers)
-            
-            if not files:
-                await update.message.reply_text(
-                    "❌ No files found in cache.\n\n"
-                    "Use `/ls <path>` first to list files, then use `/download <numbers>`.\n\n"
-                    "Note: Cache expires after 10 minutes.",
-                    parse_mode='Markdown'
-                )
-                return
-            
-            # Validate all file paths
-            from utils.security import validate_path
-            valid_files = []
-            for file_info in files:
-                if validate_path(file_info['path'], user_id=user_id) and os.path.exists(file_info['path']):
-                    valid_files.append(file_info)
-            
-            if not valid_files:
-                await update.message.reply_text(
-                    format_error("No valid files found or access denied.")
-                )
-                return
-            
-            # Show status
-            status_msg = await update.message.reply_text(
-                f"📦 Creating archive with {len(valid_files)} file(s)...",
-                parse_mode='Markdown'
-            )
-            
-            try:
-                # Create temporary ZIP file
-                import tempfile
-                from datetime import datetime
-                from services.file_service import create_zip_archive
-                
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                zip_filename = f"files_{timestamp}.zip"
-                
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
-                    temp_zip_path = tmp_file.name
-                
-                # Create ZIP archive
-                success, zip_path, zip_size, error_msg = create_zip_archive(valid_files, temp_zip_path)
-                
-                if not success:
-                    await status_msg.delete()
-                    await update.message.reply_text(
-                        format_error(f"Failed to create archive: {error_msg}")
-                    )
-                    # Clean up temp file
-                    try:
-                        os.unlink(temp_zip_path)
-                    except:
-                        pass
-                    return
-                
-                # Send ZIP file
-                await status_msg.edit_text(
-                    f"📤 Sending archive ({format_bytes(zip_size)})...",
-                    parse_mode='Markdown'
-                )
-                
-                if zip_size > TELEGRAM_DOCUMENT_MAX_BYTES:
-                    await status_msg.delete()
-                    await update.message.reply_text(
-                        format_error(
-                            f"Archive too large for Telegram ({format_bytes(zip_size)}). "
-                            f"Max is {format_bytes(TELEGRAM_DOCUMENT_MAX_BYTES)}. "
-                            "Download fewer files or smaller items."
-                        )
-                    )
-                    try:
-                        os.unlink(temp_zip_path)
-                    except OSError:
-                        pass
-                    return
-                
-                await update.message.reply_document(
-                    document=str(Path(zip_path).resolve()),
-                    filename=zip_filename,
-                    caption=f"📦 Archive with {len(valid_files)} file(s)\nSize: {format_bytes(zip_size)}"
-                )
-                
-                await status_msg.delete()
-                
-                # Clean up temp file
-                try:
-                    os.unlink(temp_zip_path)
-                except Exception as e:
-                    logger.warning(f"Failed to delete temp ZIP file: {e}")
-                
-                logger.info(f"User {user_id} downloaded {len(valid_files)} files as ZIP")
-                await save_command(user_id, f'/download {" ".join(map(str, numbers))}', f"{len(valid_files)} files")
-            
-            except Exception as e:
-                try:
-                    await status_msg.delete()
-                except Exception:
-                    pass
-                if 'temp_zip_path' in locals():
-                    try:
-                        os.unlink(temp_zip_path)
-                    except OSError:
-                        pass
-                logger.error(f"Bulk download / ZIP send failed: {e}", exc_info=True)
-                raise
-        
-    except ValueError as e:
-        await update.message.reply_text(
-            format_error(f"Invalid number format: {str(e)}")
-        )
-    except Exception as e:
-        logger.error(f"Download error: {e}", exc_info=True)
-        await update.message.reply_text(format_error(f"Download failed: {e}"))
+
+    await run_download_from_tokens(update, context, user_id, list(context.args))
 
 
 async def _process_file_upload(update: Update, file_obj, filename: str, subfolder: str = None):

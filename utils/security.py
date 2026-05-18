@@ -88,6 +88,25 @@ def rate_limit(func: Callable) -> Callable:
     return wrapper
 
 
+async def enforce_message_rate_limit_reply(update: Update, user_id: int) -> bool:
+    """
+    Rate-limit plain-text follow-up messages (same bucket as commands).
+    Returns True if the message should be processed, False if blocked (reply sent).
+    """
+    current_time = time.time()
+    user_timestamps = rate_limit_storage[user_id]
+    while user_timestamps and current_time - user_timestamps[0] > 60:
+        user_timestamps.popleft()
+    if len(user_timestamps) >= config.MAX_COMMANDS_PER_MINUTE:
+        await reply_text_safe(
+            update,
+            f"⏱ Rate limit: max {config.MAX_COMMANDS_PER_MINUTE} commands per minute.",
+        )
+        return False
+    user_timestamps.append(current_time)
+    return True
+
+
 def validate_path(path_str: str, allowed_paths: List[str] = None, user_id: int = None) -> bool:
     """
     Validate that a path is within allowed directories.
