@@ -149,6 +149,11 @@ def get_all_drives() -> List[Dict[str, Any]]:
                 if line.strip():
                     device = line.split()[0]
                     common_devices.append(device)
+
+        # Scan can succeed but list nothing inside minimal containers; probe common nodes.
+        if not common_devices:
+            common_devices = [f'/dev/sd{chr(i)}' for i in range(ord('a'), ord('z') + 1)]
+            common_devices.extend([f'/dev/nvme{i}n1' for i in range(10)])
         
         # Get SMART data for each device
         for device in common_devices:

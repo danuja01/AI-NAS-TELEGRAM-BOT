@@ -5,7 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: nas-telegram-bot
     restart: unless-stopped
-    
+    privileged: true
+
     # Environment variables (alternative to .env file)
     environment:
       - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
@@ -24,7 +25,7 @@ services:
       - LOG_FILE=/app/logs/bot.log
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - CONVERSATION_HISTORY_LENGTH=${CONVERSATION_HISTORY_LENGTH:-10}
-    
+
     # Mount volumes for persistent data
     volumes:
       # Data directory (database, chroma, etc.)
@@ -39,21 +40,21 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Optional: Mount .env file
       - ./.env:/app/.env:ro
-    
+
     # Optional: Network configuration
     # networks:
     #   - nas-network
-    
+
     # Resource limits (optional)
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: "2"
           memory: 4G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 1G
-    
+
     # Logging configuration
     logging:
       driver: "json-file"

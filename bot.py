@@ -4,7 +4,13 @@ NAS Telegram AI Assistant - Main Entry Point
 
 import logging
 
-from telegram import BotCommand, BotCommandScopeAllGroupChats, Update
+from telegram import (
+    BotCommand,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeDefault,
+    MenuButtonCommands,
+    Update,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -95,14 +101,30 @@ async def post_init(application: Application):
     await init_database()
 
     try:
-        await application.bot.set_my_commands(TELEGRAM_BOT_COMMANDS)
+        # '/' autocomplete and command list: https://core.telegram.org/bots/features#commands
+        # Register default scope (private chats + chats without a narrower scope)
+        await application.bot.set_my_commands(
+            TELEGRAM_BOT_COMMANDS,
+            scope=BotCommandScopeDefault(),
+        )
         await application.bot.set_my_commands(
             TELEGRAM_BOT_COMMANDS,
             scope=BotCommandScopeAllGroupChats(),
         )
-        logger.info("Registered %s bot commands for menu.", len(TELEGRAM_BOT_COMMANDS))
-    except Exception as e:
-        logger.warning("set_my_commands failed (menu may stay empty): %s", e)
+        # Blue "menu" next to the input: show the same command list (overrides e.g. web app default).
+        await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+
+        cmds = await application.bot.get_my_commands(scope=BotCommandScopeDefault())
+        logger.info(
+            "Bot command menu ready: default scope has %s commands (Telegram returned %s).",
+            len(TELEGRAM_BOT_COMMANDS),
+            len(cmds),
+        )
+    except Exception:
+        logger.exception(
+            "Registering commands or menu button failed — type '/' may show no suggestions. "
+            "Fallback: BotFather → /mybots → your bot → Edit Bot → Edit Commands."
+        )
     
     # Disable automatic health monitoring for Mac testing
     # Uncomment for production on NAS:
