@@ -93,7 +93,7 @@ def check_docker_alerts(containers: List[Dict[str, Any]]) -> List[Dict[str, Any]
 
 
 def check_smart_alerts(drives: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Check SMART drive health alerts."""
+    """Check SMART drive health alerts (thresholds; sector deltas are separate)."""
     alerts = []
     
     for drive in drives:
@@ -106,13 +106,46 @@ def check_smart_alerts(drives: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 'severity': 'critical',
                 'message': f"SMART health check FAILED for {device}!"
             })
-        
-        reallocated = drive.get('reallocated_sectors', 0)
-        if reallocated > 0:
-            alerts.append({
-                'type': 'smart',
-                'severity': 'warning',
-                'message': f"{device} has {reallocated} reallocated sectors"
-            })
     
+    return alerts
+
+
+def check_smart_delta_alerts(
+    drives: List[Dict[str, Any]],
+    previous: Dict[str, Dict[str, int]],
+) -> List[Dict[str, Any]]:
+    """Alert when reallocated or pending sector counts increase vs last snapshot."""
+    alerts: List[Dict[str, Any]] = []
+    for drive in drives or []:
+        device = drive.get("device") or ""
+        if not device:
+            continue
+        old = previous.get(device, {"reallocated": 0, "pending": 0})
+        try:
+            new_r = int(drive.get("reallocated_sectors") or 0)
+            new_p = int(drive.get("pending_sectors") or 0)
+        except (TypeError, ValueError):
+            continue
+        if new_r > old["reallocated"]:
+            alerts.append(
+                {
+                    "type": "smart",
+                    "severity": "critical",
+                    "message": (
+                        f"{device}: reallocated sectors increased "
+                        f"{old['reallocated']} → {new_r}"
+                    ),
+                }
+            )
+        if new_p > old["pending"]:
+            alerts.append(
+                {
+                    "type": "smart",
+                    "severity": "warning",
+                    "message": (
+                        f"{device}: pending sectors increased "
+                        f"{old['pending']} → {new_p}"
+                    ),
+                }
+            )
     return alerts

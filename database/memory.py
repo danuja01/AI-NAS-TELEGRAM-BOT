@@ -346,3 +346,110 @@ async def acknowledge_alert(alert_id: int):
     
     except Exception as e:
         logger.error(f"Failed to acknowledge alert: {e}")
+
+
+async def get_smart_snapshots_dict() -> Dict[str, Dict[str, int]]:
+    """Return {device: {reallocated, pending}} from DB."""
+    try:
+        db = await get_db()
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT device, reallocated, pending FROM smart_snapshots"
+        )
+        rows = await cur.fetchall()
+        await db.close()
+        return {
+            r["device"]: {"reallocated": r["reallocated"] or 0, "pending": r["pending"] or 0}
+            for r in rows
+        }
+    except Exception as e:
+        logger.error("get_smart_snapshots_dict: %s", e)
+        return {}
+
+
+async def upsert_smart_snapshots(drives: List[Dict[str, Any]]):
+    """Store latest SMART counters for each drive."""
+    if not drives:
+        return
+    db = None
+    try:
+        db = await get_db()
+        for d in drives:
+            dev = d.get("device") or ""
+            if not dev:
+                continue
+            realloc = int(d.get("reallocated_sectors") or 0)
+            pending = int(d.get("pending_sectors") or 0)
+            await db.execute(
+                """
+                INSERT INTO smart_snapshots (device, reallocated, pending, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(device) DO UPDATE SET
+                    reallocated = excluded.reallocated,
+                    pending = excluded.pending,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (dev, realloc, pending),
+            )
+        await db.commit()
+    except Exception as e:
+        logger.error("upsert_smart_snapshots: %s", e)
+    finally:
+        if db:
+            await db.close()
+
+
+async def add_metric_sample(
+    cpu_percent: float,
+    memory_percent: float,
+    temp_max: Optional[float],
+    disk_min_free_percent: Optional[float],
+    pending_updates_count: Optional[int] = None,
+):
+    """Append one metric row."""
+    db = None
+    try:
+        db = await get_db()
+        await db.execute(
+            """
+            INSERT INTO metric_samples
+            (cpu_percent, memory_percent, temp_max, disk_min_free_percent, pending_updates_count)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (cpu_percent, memory_percent, temp_max, disk_min_free_percent, pending_updates_count),
+        )
+        await db.commit()
+    except Exception as e:
+        logger.error("add_metric_sample: %s", e)
+    finally:
+        if db:
+            await db.close()
+
+
+async def get_metrics_digest_stats(hours: int = 24) -> Dict[str, Any]:
+    """Aggregate metric_samples for digest message."""
+    db = None
+    try:
+        db = await get_db()
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT
+                COUNT(*) AS n,
+                AVG(cpu_percent) AS cpu_avg,
+                MAX(cpu_percent) AS cpu_max,
+                AVG(memory_percent) AS mem_avg,
+                MAX(memory_percent) AS mem_max,
+                MAX(temp_max) AS temp_max,
+                MIN(disk_min_free_percent) AS disk_free_min
+            FROM metric_samples
+            WHERE recorded_at >= datetime('now', ?)
+            """,
+            (f"-{int(hours)} hours",),
+        )
+        row = await cur.fetchone()
+        await db.close()
+        return dict(row) if row else {}
+    except Exception as e:
+        logger.error("get_metrics_digest_stats: %s", e)
+        return {}

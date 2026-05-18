@@ -80,6 +80,47 @@ ALERT_THRESHOLDS = {
 # Health Check Interval (minutes)
 HEALTH_CHECK_INTERVAL = 5
 
+# Host command execution (OMV / apt on host from container)
+# Use "nsenter" with docker pid: host + privileged, or "ssh" with HOST_SSH=user@nas
+HOST_EXEC_MODE = os.getenv("HOST_EXEC_MODE", "nsenter").strip().lower()
+HOST_NSENTER_PID = int(os.getenv("HOST_NSENTER_PID", "1"))
+HOST_SSH = os.getenv("HOST_SSH", "").strip()
+HOST_SSH_EXTRA_ARGS = [
+    a.strip()
+    for a in os.getenv("HOST_SSH_EXTRA_ARGS", "").split()
+    if a.strip()
+]
+HOST_EXEC_TIMEOUT_SHORT = int(os.getenv("HOST_EXEC_TIMEOUT_SHORT", "300"))
+HOST_EXEC_TIMEOUT_LONG = int(os.getenv("HOST_EXEC_TIMEOUT_LONG", "3600"))
+
+MAINTENANCE_ALLOWED_USER_IDS = [
+    int(x.strip())
+    for x in os.getenv("MAINTENANCE_ALLOWED_USER_IDS", "").split(",")
+    if x.strip().isdigit()
+]
+
+# systemd units for host_runner + health (comma-separated)
+MONITOR_SYSTEMD_UNITS = [
+    u.strip()
+    for u in os.getenv(
+        "MONITOR_SYSTEMD_UNITS",
+        "docker,smbd,nginx",
+    ).split(",")
+    if u.strip()
+]
+
+JOURNAL_TAIL_LINES = int(os.getenv("JOURNAL_TAIL_LINES", "20"))
+JOURNAL_ALERT_COOLDOWN_SECONDS = int(os.getenv("JOURNAL_ALERT_COOLDOWN_SECONDS", "600"))
+
+# Cron notify HTTP hook (127.0.0.1 inside container; use docker exec curl from host)
+CRON_NOTIFY_SECRET = os.getenv("CRON_NOTIFY_SECRET", "").strip()
+CRON_NOTIFY_BIND = os.getenv("CRON_NOTIFY_BIND", "127.0.0.1").strip()
+CRON_NOTIFY_PORT = int(os.getenv("CRON_NOTIFY_PORT", "18765"))
+
+# Metrics samples + digest
+METRICS_SAMPLE_INTERVAL_MINUTES = int(os.getenv("METRICS_SAMPLE_INTERVAL_MINUTES", "15"))
+DIGEST_INTERVAL_HOURS = int(os.getenv("DIGEST_INTERVAL_HOURS", "24"))
+
 # Validation
 def validate_config():
     """Validate required configuration."""

@@ -65,6 +65,27 @@ CREATE TABLE IF NOT EXISTS alerts (
 
 CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp);
 CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged);
+
+-- SMART sector history (for delta alerts)
+CREATE TABLE IF NOT EXISTS smart_snapshots (
+    device TEXT PRIMARY KEY,
+    reallocated INTEGER DEFAULT 0,
+    pending INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Lightweight metric samples for digests
+CREATE TABLE IF NOT EXISTS metric_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    cpu_percent REAL,
+    memory_percent REAL,
+    temp_max REAL,
+    disk_min_free_percent REAL,
+    pending_updates_count INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_metric_samples_recorded ON metric_samples(recorded_at);
 """
 
 

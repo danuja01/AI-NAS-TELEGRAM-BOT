@@ -26,7 +26,7 @@ from database.models import init_database
 from monitoring.health_checker import start_health_monitoring
 
 # Import command handlers
-from commands import basic, monitoring, docker_cmds, filesystem, ai_cmds, service, root_cmds
+from commands import basic, monitoring, docker_cmds, filesystem, ai_cmds, service, root_cmds, operations
 
 # Setup logging
 setup_logging()
@@ -92,6 +92,9 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("rootstatus", "Root session status"),
     BotCommand("ssh", "Remote shell cmd"),
     BotCommand("cd", "Working directory"),
+    BotCommand("updates", "Check APT/OMV updates"),
+    BotCommand("omv_updates", "Updates + OMV note"),
+    BotCommand("upgrade", "Run omv-upgrade (confirm)"),
 ]
 
 
@@ -126,11 +129,9 @@ async def post_init(application: Application):
             "Fallback: BotFather → /mybots → your bot → Edit Bot → Edit Commands."
         )
     
-    # Disable automatic health monitoring for Mac testing
-    # Uncomment for production on NAS:
-    # logger.info("Starting health monitoring...")
-    # await start_health_monitoring(application.bot)
-    
+    logger.info("Starting health monitoring, metrics, digests, cron hook…")
+    await start_health_monitoring(application.bot)
+
     logger.info("Bot initialized successfully!")
 
 
@@ -208,7 +209,19 @@ def main():
     application.add_handler(CommandHandler("rootstatus", root_cmds.rootstatus_command))
     application.add_handler(CommandHandler("ssh", root_cmds.ssh_command))
     application.add_handler(CommandHandler("cd", root_cmds.cd_command))
-    
+
+    # Host / OMV maintenance
+    application.add_handler(CommandHandler("updates", operations.updates_command))
+    application.add_handler(CommandHandler("omv_updates", operations.omv_updates_command))
+    application.add_handler(CommandHandler("upgrade", operations.upgrade_command))
+
+    application.add_handler(
+        CallbackQueryHandler(
+            operations.handle_operations_callback,
+            pattern=f"^({operations.CB_UPGRADE_CONFIRM}|{operations.CB_UPGRADE_CANCEL})$",
+        )
+    )
+
     # Register callback query handler for confirmations
     application.add_handler(CallbackQueryHandler(service.handle_confirmation))
     

@@ -6,6 +6,7 @@ services:
     container_name: nas-telegram-bot
     restart: unless-stopped
     privileged: true
+    pid: host
 
     # Environment variables (alternative to .env file)
     environment:
@@ -25,6 +26,22 @@ services:
       - LOG_FILE=/app/logs/bot.log
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - CONVERSATION_HISTORY_LENGTH=${CONVERSATION_HISTORY_LENGTH:-10}
+      - HOST_EXEC_MODE=${HOST_EXEC_MODE:-nsenter}
+      - HOST_NSENTER_PID=${HOST_NSENTER_PID:-1}
+      - HOST_SSH=${HOST_SSH:-}
+      - HOST_SSH_EXTRA_ARGS=${HOST_SSH_EXTRA_ARGS:-}
+      - HOST_EXEC_TIMEOUT_SHORT=${HOST_EXEC_TIMEOUT_SHORT:-300}
+      - HOST_EXEC_TIMEOUT_LONG=${HOST_EXEC_TIMEOUT_LONG:-3600}
+      - MAINTENANCE_ALLOWED_USER_IDS=${MAINTENANCE_ALLOWED_USER_IDS:-}
+      - MONITOR_SYSTEMD_UNITS=${MONITOR_SYSTEMD_UNITS:-docker,smbd,nginx}
+      - JOURNAL_TAIL_LINES=${JOURNAL_TAIL_LINES:-20}
+      - JOURNAL_ALERT_COOLDOWN_SECONDS=${JOURNAL_ALERT_COOLDOWN_SECONDS:-600}
+      - CRON_NOTIFY_SECRET=${CRON_NOTIFY_SECRET:-}
+      - CRON_NOTIFY_BIND=${CRON_NOTIFY_BIND:-127.0.0.1}
+      - CRON_NOTIFY_PORT=${CRON_NOTIFY_PORT:-18765}
+      - METRICS_SAMPLE_INTERVAL_MINUTES=${METRICS_SAMPLE_INTERVAL_MINUTES:-15}
+      - DIGEST_INTERVAL_HOURS=${DIGEST_INTERVAL_HOURS:-24}
+      - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-5}
 
     # Mount volumes for persistent data
     volumes:

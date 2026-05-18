@@ -45,6 +45,35 @@ In Telegram: `/start` → `/index` → `/help`
 
 See the [Docker Deployment wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Docker-Deployment) for volume mounts, updates, and NAS-specific paths.
 
+## Operations: host updates, cron alerts, metrics
+
+For OpenMediaVault / Debian **host** actions from the bot, the container should run with `privileged: true` and **`pid: host`** (see `docker-compose.yml`) so `nsenter` can reach the host init, **or** set `HOST_EXEC_MODE=ssh` and `HOST_SSH=user@nas-ip`.
+
+| Env | Purpose |
+|-----|---------|
+| `HOST_EXEC_MODE` | `nsenter` (default), `ssh`, or `none` |
+| `HOST_SSH` | e.g. `admin@192.168.1.5` when using SSH mode |
+| `MAINTENANCE_ALLOWED_USER_IDS` | Who may run `/upgrade` (comma-separated); if empty, same as `ALLOWED_USER_IDS` |
+| `MONITOR_SYSTEMD_UNITS` | Units for health + `journalctl` tails (e.g. `docker,smbd,nginx`) |
+| `CRON_NOTIFY_SECRET` | If set, starts an HTTP hook inside the container on `CRON_NOTIFY_BIND:CRON_NOTIFY_PORT` |
+| `HEALTH_CHECK_INTERVAL`, `METRICS_SAMPLE_INTERVAL_MINUTES`, `DIGEST_INTERVAL_HOURS` | Monitoring scheduler |
+
+**Telegram commands:** `/updates` (apt refresh + upgradable list), `/omv_updates` (same + OMV note), `/upgrade` (confirm, then **`omv-upgrade`** on host; long-running).
+
+**Cron on the NAS host — option A — script:** [`scripts/notify_telegram.sh`](scripts/notify_telegram.sh) calls the Telegram HTTP API (set `TELEGRAM_CHAT_ID` or rely on first `ALLOWED_USER_IDS` from `.env`):
+
+```bash
+0 3 * * * /path/to/BOT/scripts/notify_telegram.sh "nightly-backup" "ok" "Finished rsync"
+```
+
+**Option B — HTTP hook (requires `CRON_NOTIFY_SECRET`):** from the host:
+
+```bash
+docker exec nas-telegram-bot curl -sS -X POST http://127.0.0.1:18765/notify \
+  -H 'Content-Type: application/json' \
+  -d '{"secret":"YOUR_SECRET","job":"backup","status":"ok","message":"done"}'
+```
+
 ---
 
 ## Features

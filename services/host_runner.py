@@ -1,0 +1,191 @@
+"""
+Execute allowlisted commands on the NAS host from inside Docker.
+
+Modes:
+- nsenter: join host init namespaces (use docker compose pid: host + privileged)
+- ssh:    BatchMode SSH to HOST_SSH (e.g. admin@192.168.1.5)
+- none:   disabled (returns structured error)
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import shutil
+import subprocess
+from dataclasses import dataclass
+from typing import List, Optional, Sequence, Tuple
+
+import config
+
+logger = logging.getLogger(__name__)
+
+_UNIT_RE = re.compile(r"^[a-zA-Z0-9_.@-]+$")
+
+
+@dataclass
+class HostExecResult:
+    profile: str
+    exit_code: int
+    stdout: str
+    stderr: str
+    error: Optional[str] = None  # configuration / validation error
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None and self.exit_code == 0
+
+
+def _truncate(s: str, limit: int = 12000) -> str:
+    if len(s) <= limit:
+        return s
+    return s[: limit - 40] + "\n\n… (truncated) …\n"
+
+
+def _validate_unit(unit: str) -> bool:
+    if not unit or not _UNIT_RE.match(unit):
+        return False
+    return unit in config.MONITOR_SYSTEMD_UNITS
+
+
+def _build_argv_nsenter(inner: Sequence[str]) -> List[str]:
+    pid = str(config.HOST_NSENTER_PID)
+    return ["nsenter", "-t", pid, "-m", "-u", "-i", "-n", "-p", "--", *inner]
+
+
+def _build_argv_ssh(inner: Sequence[str]) -> List[str]:
+    base = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"]
+    extra = getattr(config, "HOST_SSH_EXTRA_ARGS", []) or []
+    if extra:
+        base.extend(extra)
+    base.append(config.HOST_SSH)
+    base.append("--")
+    base.extend(inner)
+    return base
+
+
+def _resolve_wrapper(inner: Sequence[str]) -> Tuple[List[str], Optional[str]]:
+    mode = (config.HOST_EXEC_MODE or "none").lower()
+    if mode == "none":
+        return [], "Host execution disabled (set HOST_EXEC_MODE=nsenter or ssh)"
+    if mode == "nsenter":
+        if not shutil.which("nsenter"):
+            return [], "nsenter not found in container"
+        return _build_argv_nsenter(inner), None
+    if mode == "ssh":
+        if not config.HOST_SSH:
+            return [], "HOST_SSH not set (user@host)"
+        if not shutil.which("ssh"):
+            return [], "ssh not found in container"
+        return _build_argv_ssh(inner), None
+    return [], f"Unknown HOST_EXEC_MODE: {config.HOST_EXEC_MODE}"
+
+
+def run_profile(
+    profile: str,
+    *,
+    extra_args: Optional[Sequence[str]] = None,
+    timeout: Optional[int] = None,
+    env: Optional[dict] = None,
+) -> HostExecResult:
+    """
+    Run a predefined host operation. Only allowlisted profiles are executed.
+    """
+    extra_args = list(extra_args or [])
+    to: Optional[int] = timeout if timeout is not None else config.HOST_EXEC_TIMEOUT_SHORT
+
+    inner: Optional[List[str]] = None
+
+    if profile == "apt_update":
+        inner = ["apt-get", "update", "-qq"]
+    elif profile == "apt_list_upgradable":
+        inner = ["apt", "list", "--upgradable"]
+    elif profile == "reboot_required":
+        inner = ["sh", "-c", "if [ -f /var/run/reboot-required ]; then cat /var/run/reboot-required; else echo NO_REBOOT_PENDING; fi"]
+    elif profile == "omv_upgrade":
+        inner = [
+            "sh",
+            "-c",
+            "export DEBIAN_FRONTEND=noninteractive; "
+            "if command -v omv-upgrade >/dev/null 2>&1; then exec omv-upgrade; "
+            "elif [ -x /usr/sbin/omv-upgrade ]; then exec /usr/sbin/omv-upgrade; "
+            "else echo 'omv-upgrade not found' >&2; exit 127; fi",
+        ]
+        to = config.HOST_EXEC_TIMEOUT_LONG
+    elif profile == "systemctl_is_active":
+        if len(extra_args) != 1 or not _validate_unit(extra_args[0]):
+            return HostExecResult(
+                profile, -1, "", "", error="Invalid or disallowed systemd unit"
+            )
+        inner = ["systemctl", "is-active", extra_args[0]]
+    elif profile == "journal_tail":
+        if len(extra_args) != 1 or not _validate_unit(extra_args[0]):
+            return HostExecResult(
+                profile, -1, "", "", error="Invalid or disallowed systemd unit"
+            )
+        n = str(min(50, max(5, config.JOURNAL_TAIL_LINES)))
+        inner = ["journalctl", "-u", extra_args[0], "-n", n, "--no-pager"]
+    else:
+        return HostExecResult(profile, -1, "", "", error=f"Unknown profile: {profile}")
+
+    argv, err = _resolve_wrapper(inner)
+    if err:
+        return HostExecResult(profile, -1, "", "", error=err)
+
+    run_env = None
+    if env:
+        import os
+
+        run_env = os.environ.copy()
+        run_env.update(env)
+
+    logger.info("host_runner profile=%s argv0=%s", profile, argv[0] if argv else None)
+    try:
+        proc = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=to,
+            env=run_env,
+        )
+        return HostExecResult(
+            profile,
+            proc.returncode,
+            _truncate(proc.stdout or ""),
+            _truncate(proc.stderr or "", limit=4000),
+        )
+    except subprocess.TimeoutExpired as e:
+        return HostExecResult(
+            profile,
+            -1,
+            _truncate(e.stdout.decode() if e.stdout else ""),
+            _truncate(e.stderr.decode() if e.stderr else ""),
+            error=f"Timeout (>{to}s) for profile {profile}",
+        )
+    except Exception as e:
+        logger.exception("host_runner failed")
+        return HostExecResult(profile, -1, "", "", error=str(e))
+
+
+def format_host_result_html(title: str, result: HostExecResult) -> str:
+    """Format HostExecResult for Telegram HTML."""
+    from utils.formatters import escape_telegram_html
+
+    lines = [
+        f"<b>{escape_telegram_html(title)}</b>",
+        "",
+    ]
+    if result.error:
+        lines.append(f"⚠️ <b>Error</b>: {escape_telegram_html(result.error)}")
+    lines.append(f"<b>Exit</b>: <code>{result.exit_code}</code>")
+    out = (result.stdout or "").strip()
+    err = (result.stderr or "").strip()
+    if out:
+        lines.append("")
+        lines.append("<b>stdout</b>")
+        lines.append(f"<pre>{escape_telegram_html(out)}</pre>")
+    if err:
+        lines.append("")
+        lines.append("<b>stderr</b>")
+        lines.append(f"<pre>{escape_telegram_html(err)}</pre>")
+    return "\n".join(lines)
