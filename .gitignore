@@ -10,6 +10,7 @@ ENV/
 
 # Environment
 .env
+.env.nas
 
 # Logs
 logs/*.log

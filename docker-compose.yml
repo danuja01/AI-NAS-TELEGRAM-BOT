@@ -19,8 +19,8 @@ services:
       - SERPER_API_KEY=${SERPER_API_KEY:-}
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - ROOT_PASSWORD=${ROOT_PASSWORD:-}
-      - DOCUMENT_PATH=/app/documents
-      - ALLOWED_PATHS=/app/documents,/app/data
+      - DOCUMENT_PATH=${DOCUMENT_PATH:-/app/documents}
+      - ALLOWED_PATHS=${ALLOWED_PATHS:-/app/documents,/app/data}
       - DATABASE_PATH=/app/data/bot.db
       - CHROMA_PATH=/app/data/chroma_db
       - LOG_FILE=/app/logs/bot.log
@@ -35,6 +35,8 @@ services:
       - ./logs:/app/logs
       # Documents directory (for RAG) - read-write for uploads
       - ${DOCUMENT_PATH:-./documents}:/app/documents
+      # NAS disk mount (entire disk for /cd root access)
+      - /srv/dev-disk-by-uuid-9ac22f70-05c6-442f-993b-0d9ca1ae5988:/srv/dev-disk-by-uuid-9ac22f70-05c6-442f-993b-0d9ca1ae5988
       # Docker socket for container management
       - /var/run/docker.sock:/var/run/docker.sock
       # Optional: Mount .env file
