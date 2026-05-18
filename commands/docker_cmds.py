@@ -137,20 +137,20 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @require_auth
 @rate_limit
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start_container <container> command - Start a Docker container."""
+async def start_container_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /dstart <container> - Start a Docker container (not /start — that is the bot welcome)."""
     user_id = update.effective_user.id
-    
+
     if not context.args:
         await update.message.reply_text(
-            "❌ Usage: `/start <container_name>`\n\n"
-            "Example: `/start nginx`",
-            parse_mode='Markdown'
+            "❌ Usage: `/dstart <container_name>`\n\n"
+            "Example: `/dstart nginx`",
+            parse_mode="Markdown",
         )
         return
-    
+
     container_name = context.args[0]
-    
+
     try:
         await update.message.reply_text(f"🚀 Starting container `{container_name}`...")
         
@@ -160,14 +160,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(message, parse_mode='Markdown')
         
         # Save to conversation history
-        await save_conversation(user_id, 'user', f'/start {container_name}')
+        await save_conversation(user_id, 'user', f'/dstart {container_name}')
         await save_conversation(user_id, 'assistant', message)
-        await save_command(user_id, f'/start {container_name}', 'Container started')
+        await save_command(user_id, f'/dstart {container_name}', 'Container started')
         
     except ValueError as e:
         await update.message.reply_text(format_error(str(e)))
     except Exception as e:
-        logger.error(f"Error in start_command: {e}", exc_info=True)
+        logger.error(f"Error in start_container_command: {e}", exc_info=True)
         await update.message.reply_text(format_error(f"Failed to start container: {e}"))
 
 

@@ -9,6 +9,7 @@ from typing import List, Dict, Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import Bot
+from telegram.constants import ParseMode
 
 import config
 from services.system_monitor import (
@@ -21,6 +22,7 @@ from monitoring.alerts import (
     check_temperature_alerts, check_docker_alerts, check_smart_alerts
 )
 from database.memory import save_alert, get_unacknowledged_alerts
+from utils.formatters import escape_telegram_html
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +107,17 @@ async def send_alerts(bot: Bot, alerts: List[Dict[str, Any]]):
         }
         
         icon = severity_icons.get(alert['severity'], '⚠️')
-        message = f"{icon} **Alert: {alert['severity'].upper()}**\n\n{alert['message']}"
-        
+        sev = escape_telegram_html(alert['severity'].upper())
+        body = escape_telegram_html(alert['message'])
+        message = f"{icon} <b>Alert: {sev}</b>\n\n{body}"
+
         # Send to all authorized users
         for user_id in config.ALLOWED_USER_IDS:
             try:
                 await bot.send_message(
                     chat_id=user_id,
                     text=message,
-                    parse_mode='Markdown'
+                    parse_mode=ParseMode.HTML,
                 )
                 logger.info(f"Sent alert to user {user_id}: {alert['type']}")
             except Exception as e:

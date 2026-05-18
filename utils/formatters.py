@@ -1,10 +1,21 @@
 """
-Beautiful message formatters for Telegram with emojis and markdown.
+Beautiful message formatters for Telegram with emojis and markdown / HTML.
+Monitoring-style formatters use Telegram HTML (safe for dynamic system text).
 """
 
+import html
 import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
+
+
+def escape_telegram_html(value: Any) -> str:
+    """Escape dynamic text for Telegram HTML parse mode."""
+    return html.escape(str(value), quote=False)
+
+
+def _h(value: Any) -> str:
+    return escape_telegram_html(value)
 
 
 def format_ai_response(text: str) -> str:
@@ -48,137 +59,148 @@ def format_ai_response(text: str) -> str:
 
 
 def format_system_stats(stats: Dict[str, Any]) -> str:
-    """Format comprehensive system statistics."""
-    msg = "🖥 **NAS Status**\n\n"
-    
+    """Format comprehensive system statistics (Telegram HTML)."""
+    msg = "🖥 <b>NAS Status</b>\n\n"
+
     # CPU
-    if 'cpu' in stats:
-        cpu = stats['cpu']
-        msg += f"**CPU:** {cpu.get('percent', 0):.1f}%\n"
-        if 'load_avg' in cpu:
-            loads = cpu['load_avg']
-            msg += f"**Load:** {loads[0]:.2f}, {loads[1]:.2f}, {loads[2]:.2f}\n"
-    
+    if "cpu" in stats:
+        cpu = stats["cpu"]
+        msg += f"<b>CPU:</b> {cpu.get('percent', 0):.1f}%\n"
+        if "load_avg" in cpu:
+            loads = cpu["load_avg"]
+            msg += (
+                f"<b>Load:</b> {loads[0]:.2f}, {loads[1]:.2f}, {loads[2]:.2f}\n"
+            )
+
     # Memory
-    if 'memory' in stats:
-        mem = stats['memory']
-        msg += f"**RAM:** {mem.get('used_gb', 0):.1f}GB / {mem.get('total_gb', 0):.1f}GB ({mem.get('percent', 0):.1f}%)\n"
-    
+    if "memory" in stats:
+        mem = stats["memory"]
+        msg += (
+            f"<b>RAM:</b> {mem.get('used_gb', 0):.1f}GB / "
+            f"{mem.get('total_gb', 0):.1f}GB ({mem.get('percent', 0):.1f}%)\n"
+        )
+
     # Temperature
-    if 'temperature' in stats and stats['temperature']:
-        temp = stats['temperature']
-        msg += f"**Temp:** {temp}°C\n"
-    
+    if "temperature" in stats and stats["temperature"] is not None:
+        temp = stats["temperature"]
+        msg += f"<b>Temp:</b> {_h(temp)}°C\n"
+
     # Disk
-    if 'disk' in stats:
-        disk = stats['disk']
-        msg += f"**Disk Free:** {disk.get('free_gb', 0):.1f}GB / {disk.get('total_gb', 0):.1f}GB\n"
-    
+    if "disk" in stats:
+        disk = stats["disk"]
+        msg += (
+            f"<b>Disk Free:</b> {disk.get('free_gb', 0):.1f}GB / "
+            f"{disk.get('total_gb', 0):.1f}GB\n"
+        )
+
     # Docker
-    if 'docker' in stats:
-        docker = stats['docker']
-        msg += f"**Docker:** {docker.get('running', 0)} Running\n"
-    
-    # Uptime
-    if 'uptime' in stats:
-        msg += f"**Uptime:** {stats['uptime']}\n"
-    
+    if "docker" in stats:
+        docker = stats["docker"]
+        msg += f"<b>Docker:</b> {docker.get('running', 0)} Running\n"
+
+    # Uptime (seconds in comprehensive status payload)
+    if "uptime" in stats:
+        msg += f"<b>Uptime:</b> {_h(stats['uptime'])}\n"
+
     return msg
 
 
 def format_cpu_stats(cpu_stats: Dict[str, Any]) -> str:
-    """Format CPU statistics."""
-    msg = "💻 **CPU Statistics**\n\n"
-    
-    msg += f"**Usage:** {cpu_stats.get('percent', 0):.1f}%\n"
-    
-    if 'per_cpu' in cpu_stats and cpu_stats['per_cpu']:
-        msg += f"**Cores:** {len(cpu_stats['per_cpu'])}\n"
-        cores_str = ", ".join([f"{p:.0f}%" for p in cpu_stats['per_cpu'][:8]])  # Show first 8
-        msg += f"**Per Core:** {cores_str}\n"
-    
-    if 'load_avg' in cpu_stats:
-        loads = cpu_stats['load_avg']
-        msg += f"**Load Average:** {loads[0]:.2f}, {loads[1]:.2f}, {loads[2]:.2f}\n"
-    
-    if 'frequency' in cpu_stats:
-        freq = cpu_stats['frequency']
-        msg += f"**Frequency:** {freq.get('current', 0):.0f} MHz\n"
-    
+    """Format CPU statistics (Telegram HTML)."""
+    msg = "💻 <b>CPU Statistics</b>\n\n"
+
+    msg += f"<b>Usage:</b> {cpu_stats.get('percent', 0):.1f}%\n"
+
+    if "per_cpu" in cpu_stats and cpu_stats["per_cpu"]:
+        msg += f"<b>Cores:</b> {len(cpu_stats['per_cpu'])}\n"
+        cores_str = ", ".join([f"{p:.0f}%" for p in cpu_stats["per_cpu"][:8]])
+        msg += f"<b>Per Core:</b> {cores_str}\n"
+
+    if "load_avg" in cpu_stats:
+        loads = cpu_stats["load_avg"]
+        msg += f"<b>Load Average:</b> {loads[0]:.2f}, {loads[1]:.2f}, {loads[2]:.2f}\n"
+
+    if "frequency" in cpu_stats:
+        freq = cpu_stats["frequency"]
+        msg += f"<b>Frequency:</b> {freq.get('current', 0):.0f} MHz\n"
+
     return msg
 
 
 def format_memory_stats(mem_stats: Dict[str, Any]) -> str:
-    """Format memory statistics."""
-    msg = "🧠 **Memory Statistics**\n\n"
-    
-    msg += f"**Total:** {mem_stats.get('total_gb', 0):.2f} GB\n"
-    msg += f"**Used:** {mem_stats.get('used_gb', 0):.2f} GB\n"
-    msg += f"**Available:** {mem_stats.get('available_gb', 0):.2f} GB\n"
-    msg += f"**Usage:** {mem_stats.get('percent', 0):.1f}%\n\n"
-    
-    if 'swap' in mem_stats:
-        swap = mem_stats['swap']
-        msg += "**Swap:**\n"
+    """Format memory statistics (Telegram HTML)."""
+    msg = "🧠 <b>Memory Statistics</b>\n\n"
+
+    msg += f"<b>Total:</b> {mem_stats.get('total_gb', 0):.2f} GB\n"
+    msg += f"<b>Used:</b> {mem_stats.get('used_gb', 0):.2f} GB\n"
+    msg += f"<b>Available:</b> {mem_stats.get('available_gb', 0):.2f} GB\n"
+    msg += f"<b>Usage:</b> {mem_stats.get('percent', 0):.1f}%\n\n"
+
+    if "swap" in mem_stats:
+        swap = mem_stats["swap"]
+        msg += "<b>Swap:</b>\n"
         msg += f"  Total: {swap.get('total_gb', 0):.2f} GB\n"
         msg += f"  Used: {swap.get('used_gb', 0):.2f} GB\n"
         msg += f"  Usage: {swap.get('percent', 0):.1f}%\n"
-    
+
     return msg
 
 
 def format_disk_stats(disk_stats: List[Dict[str, Any]]) -> str:
-    """Format disk statistics."""
-    msg = "💾 **Disk Statistics**\n\n"
-    
+    """Format disk statistics (Telegram HTML)."""
+    msg = "💾 <b>Disk Statistics</b>\n\n"
+
     for disk in disk_stats:
-        msg += f"**{disk.get('mountpoint', 'Unknown')}**\n"
-        msg += f"  Device: `{disk.get('device', 'N/A')}`\n"
+        mnt = disk.get("mountpoint", "Unknown")
+        dev = disk.get("device", "N/A")
+        msg += f"<b>{_h(mnt)}</b>\n"
+        msg += f"  Device: <code>{_h(dev)}</code>\n"
         msg += f"  Total: {disk.get('total_gb', 0):.1f} GB\n"
         msg += f"  Used: {disk.get('used_gb', 0):.1f} GB\n"
         msg += f"  Free: {disk.get('free_gb', 0):.1f} GB\n"
         msg += f"  Usage: {disk.get('percent', 0):.1f}%\n\n"
-    
+
     return msg
 
 
 def format_temperature_stats(temp_stats: Dict[str, Any]) -> str:
-    """Format temperature statistics."""
-    msg = "🌡 **Temperature Statistics**\n\n"
-    
+    """Format temperature statistics (Telegram HTML)."""
+    msg = "🌡 <b>Temperature Statistics</b>\n\n"
+
     if not temp_stats or all(v is None for v in temp_stats.values()):
-        msg += "_No temperature sensors found_\n"
+        msg += "<i>No temperature sensors found</i>\n"
         return msg
-    
+
     for sensor, temp in temp_stats.items():
         if temp is not None:
             icon = "🔥" if temp > 70 else "⚠️" if temp > 60 else "✅"
-            msg += f"{icon} **{sensor}:** {temp:.1f}°C\n"
-    
+            msg += f"{icon} <b>{_h(sensor)}:</b> {temp:.1f}°C\n"
+
     return msg
 
 
 def format_network_stats(net_stats: Dict[str, Any]) -> str:
-    """Format network statistics."""
-    msg = "🌐 **Network Statistics**\n\n"
-    
+    """Format network statistics (Telegram HTML)."""
+    msg = "🌐 <b>Network Statistics</b>\n\n"
+
     for interface, stats in net_stats.items():
-        # Skip non-interface entries (like tailscale_ip)
-        if interface == 'tailscale_ip' or not isinstance(stats, dict):
+        if interface == "tailscale_ip" or not isinstance(stats, dict):
             continue
-            
-        msg += f"**{interface}**\n"
+
+        msg += f"<b>{_h(interface)}</b>\n"
         msg += f"  Sent: {format_bytes(stats.get('bytes_sent', 0))}\n"
         msg += f"  Received: {format_bytes(stats.get('bytes_recv', 0))}\n"
-        
-        if 'speed_mbps' in stats:
-            msg += f"  Speed: {stats['speed_mbps']} Mbps\n"
-        
+
+        if "speed_mbps" in stats:
+            spd = stats["speed_mbps"]
+            msg += f"  Speed: {_h(spd)} Mbps\n"
+
         msg += "\n"
-    
-    if 'tailscale_ip' in net_stats:
-        msg += f"**Tailscale IP:** `{net_stats['tailscale_ip']}`\n"
-    
+
+    if "tailscale_ip" in net_stats:
+        ts = net_stats["tailscale_ip"]
+        msg += f"<b>Tailscale IP:</b> <code>{_h(ts)}</code>\n"
+
     return msg
 
 
@@ -294,7 +316,7 @@ def format_file_list_numbered(files: List[Dict[str, Any]], path: str) -> str:
 
 
 def format_health_score(score: int, issues: List[str]) -> str:
-    """Format system health score."""
+    """Format system health score (Telegram HTML)."""
     if score >= 90:
         icon = "✅"
         status = "Excellent"
@@ -310,56 +332,65 @@ def format_health_score(score: int, issues: List[str]) -> str:
     else:
         icon = "🔴"
         status = "Critical"
-    
-    msg = f"{icon} **System Health: {status}** ({score}/100)\n\n"
-    
+
+    msg = f"{icon} <b>System Health: {_h(status)}</b> ({score}/100)\n\n"
+
     if issues:
-        msg += "**Issues:**\n"
+        msg += "<b>Issues:</b>\n"
         for issue in issues:
-            # Escape special Markdown characters in issue text
-            escaped_issue = issue.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
-            msg += f"⚠️ {escaped_issue}\n"
+            msg += f"⚠️ {_h(issue)}\n"
     else:
         msg += "✅ No issues detected\n"
-    
+
     return msg
 
 
 def format_smart_data(drives: List[Dict[str, Any]]) -> str:
-    """Format SMART drive data."""
+    """Format SMART drive data (Telegram HTML)."""
     if not drives:
-        return "💿 **Drive Health**\n\n_No drives found or smartctl not available_"
-    
-    msg = "💿 **Drive Health**\n\n"
-    
+        return (
+            "💿 <b>Drive Health</b>\n\n"
+            "<i>No drives found or smartctl not available</i>"
+        )
+
+    msg = "💿 <b>Drive Health</b>\n\n"
+
     for drive in drives:
-        name = drive.get('device', 'Unknown')
-        health = drive.get('health', 'UNKNOWN')
-        
-        icon = "✅" if health == "PASSED" else "❌" if health == "FAILED" else "⚠️"
-        
-        msg += f"{icon} **{name}**\n"
-        msg += f"  Health: {health}\n"
-        
-        if 'model' in drive:
-            msg += f"  Model: {drive['model']}\n"
-        if 'temperature' in drive:
-            msg += f"  Temp: {drive['temperature']}°C\n"
-        if 'power_on_hours' in drive:
-            msg += f"  Power On: {drive['power_on_hours']} hours\n"
-        if 'reallocated_sectors' in drive:
-            sectors = drive['reallocated_sectors']
+        name = drive.get("device", "Unknown")
+        health = drive.get("health", "UNKNOWN")
+        icon = (
+            "✅"
+            if health == "PASSED"
+            else "❌" if health == "FAILED" else "⚠️"
+        )
+
+        msg += f"{icon} <b>{_h(name)}</b>\n"
+        msg += f"  Health: {_h(health)}\n"
+
+        if "model" in drive:
+            msg += f"  Model: {_h(drive['model'])}\n"
+        if "temperature" in drive:
+            msg += f"  Temp: {_h(drive['temperature'])}°C\n"
+        if "power_on_hours" in drive:
+            msg += f"  Power On: {_h(drive['power_on_hours'])} hours\n"
+        if "reallocated_sectors" in drive:
+            sectors = drive["reallocated_sectors"]
             if sectors > 0:
-                msg += f"  ⚠️ Reallocated Sectors: {sectors}\n"
-        
+                msg += f"  ⚠️ Reallocated Sectors: {_h(sectors)}\n"
+
         msg += "\n"
-    
+
     return msg
 
 
 def format_error(error_msg: str) -> str:
     """Format error message."""
     return f"❌ **Error**\n\n{error_msg}"
+
+
+def format_error_html(error_msg: str) -> str:
+    """Format error message for Telegram HTML parse mode."""
+    return f"❌ <b>Error</b>\n\n{_h(error_msg)}"
 
 
 def format_success(success_msg: str) -> str:

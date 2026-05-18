@@ -2,9 +2,9 @@
 NAS Telegram AI Assistant - Main Entry Point
 """
 
-import asyncio
 import logging
-from telegram import Update
+
+from telegram import BotCommand, BotCommandScopeAllGroupChats, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -16,7 +16,6 @@ from telegram.ext import (
 
 import config
 from utils.logger import setup_logging
-from utils.security import require_auth
 from database.models import init_database
 from monitoring.health_checker import start_health_monitoring
 
@@ -42,10 +41,68 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Failed to send error message: {e}")
 
 
+# Commands shown in Telegram's "/" menu (keep in sync with CommandHandler registrations)
+TELEGRAM_BOT_COMMANDS = [
+    BotCommand("start", "Welcome and overview"),
+    BotCommand("help", "List all commands"),
+    BotCommand("status", "System overview"),
+    BotCommand("cpu", "CPU usage"),
+    BotCommand("ram", "Memory usage"),
+    BotCommand("disk", "Disk partitions"),
+    BotCommand("temps", "Temperature sensors"),
+    BotCommand("network", "Network stats"),
+    BotCommand("uptime", "System uptime"),
+    BotCommand("health", "Health score"),
+    BotCommand("smart", "Drive SMART"),
+    BotCommand("drives", "Same as SMART"),
+    BotCommand("docker", "Docker containers"),
+    BotCommand("containers", "Docker list alias"),
+    BotCommand("dstart", "Start a container"),
+    BotCommand("restart", "Restart a container"),
+    BotCommand("stop", "Stop a container"),
+    BotCommand("logs", "Container logs"),
+    BotCommand("files", "Browse files"),
+    BotCommand("ls", "List directory"),
+    BotCommand("find", "Find files"),
+    BotCommand("tree", "Directory tree"),
+    BotCommand("storage", "Disk usage paths"),
+    BotCommand("download", "Download file"),
+    BotCommand("uploadfile", "Upload file"),
+    BotCommand("services", "System services"),
+    BotCommand("restart_service", "Restart service"),
+    BotCommand("reboot", "Reboot (confirm)"),
+    BotCommand("shutdown", "Shutdown (confirm)"),
+    BotCommand("ask", "Ask documents (RAG)"),
+    BotCommand("chat", "Chat with AI"),
+    BotCommand("summarize", "Summarize docs"),
+    BotCommand("explain", "Explain a term"),
+    BotCommand("analyze", "Analyze text"),
+    BotCommand("think", "Deep reasoning"),
+    BotCommand("websearch", "Web search"),
+    BotCommand("index", "Re-index documents"),
+    BotCommand("clear", "Clear history"),
+    BotCommand("rootlogin", "Root session"),
+    BotCommand("rootlogout", "End root"),
+    BotCommand("rootstatus", "Root session status"),
+    BotCommand("ssh", "Remote shell cmd"),
+    BotCommand("cd", "Working directory"),
+]
+
+
 async def post_init(application: Application):
     """Initialize bot after startup."""
     logger.info("Initializing database...")
     await init_database()
+
+    try:
+        await application.bot.set_my_commands(TELEGRAM_BOT_COMMANDS)
+        await application.bot.set_my_commands(
+            TELEGRAM_BOT_COMMANDS,
+            scope=BotCommandScopeAllGroupChats(),
+        )
+        logger.info("Registered %s bot commands for menu.", len(TELEGRAM_BOT_COMMANDS))
+    except Exception as e:
+        logger.warning("set_my_commands failed (menu may stay empty): %s", e)
     
     # Disable automatic health monitoring for Mac testing
     # Uncomment for production on NAS:
@@ -88,7 +145,7 @@ def main():
     application.add_handler(CommandHandler("containers", docker_cmds.containers_command))
     application.add_handler(CommandHandler("restart", docker_cmds.restart_command))
     application.add_handler(CommandHandler("stop", docker_cmds.stop_command))
-    application.add_handler(CommandHandler("start", docker_cmds.start_command))
+    application.add_handler(CommandHandler("dstart", docker_cmds.start_container_command))
     application.add_handler(CommandHandler("logs", docker_cmds.logs_command))
     
     # Register command handlers - File System

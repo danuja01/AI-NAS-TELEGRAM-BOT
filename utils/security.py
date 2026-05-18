@@ -16,6 +16,8 @@ from telegram.ext import ContextTypes
 
 import config
 
+from utils.telegram_reply import reply_text_safe
+
 logger = logging.getLogger(__name__)
 
 # Rate limiting storage: {user_id: deque of timestamps}
@@ -39,8 +41,9 @@ def require_auth(func: Callable) -> Callable:
         # Check if user is authorized
         if user.id not in config.ALLOWED_USER_IDS:
             logger.warning(f"Unauthorized access attempt by user {user.id} ({user.username})")
-            await update.message.reply_text(
-                "🚫 Unauthorized. You are not allowed to use this bot."
+            await reply_text_safe(
+                update,
+                "🚫 Unauthorized. You are not allowed to use this bot.",
             )
             return
         
@@ -70,9 +73,10 @@ def rate_limit(func: Callable) -> Callable:
         # Check if rate limit exceeded
         if len(user_timestamps) >= config.MAX_COMMANDS_PER_MINUTE:
             logger.warning(f"Rate limit exceeded for user {user_id}")
-            await update.message.reply_text(
+            await reply_text_safe(
+                update,
                 f"⏱ Rate limit exceeded. Please wait before sending more commands.\n"
-                f"Limit: {config.MAX_COMMANDS_PER_MINUTE} commands per minute."
+                f"Limit: {config.MAX_COMMANDS_PER_MINUTE} commands per minute.",
             )
             return
         
@@ -213,8 +217,7 @@ async def send_confirmation(
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(message, reply_markup=reply_markup)
+    await reply_text_safe(update, message, reply_markup=reply_markup)
 
 
 def log_security_event(event_type: str, user_id: int, details: str):

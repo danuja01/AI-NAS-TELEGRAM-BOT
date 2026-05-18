@@ -74,7 +74,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/containers` - Alias for /docker
 `/restart <name>` - Restart a container
 `/stop <name>` - Stop a container
-`/start <name>` - Start a container
+`/dstart <name>` - Start a container
 `/logs <name> [lines]` - View container logs
 
 **📁 File System**
