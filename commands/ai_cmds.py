@@ -8,6 +8,7 @@ from telegram.ext import ContextTypes
 
 from utils.security import require_auth, rate_limit
 from utils.formatters import format_error, format_success, format_ai_response
+from utils.telegram_reply import reply_text_chunked
 from ai.rag_engine import ask, index_documents, is_rag_ready, get_index_stats
 from ai.gpt_client import generate, generate_with_thinking, summarize_text
 from ai.search_engine import search_web, is_search_available
@@ -50,8 +51,8 @@ async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Format for Telegram
         formatted_answer = format_ai_response(answer)
-        await update.message.reply_text(formatted_answer, parse_mode='Markdown')
-        
+        await reply_text_chunked(update, formatted_answer, parse_mode="Markdown")
+
         # Save to conversation history
         await ConversationManager.add_message(user_id, 'user', question)
         await ConversationManager.add_message(user_id, 'assistant', answer)
@@ -96,8 +97,8 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Format for Telegram
         formatted_response = format_ai_response(response)
-        await update.message.reply_text(formatted_response, parse_mode='Markdown')
-        
+        await reply_text_chunked(update, formatted_response, parse_mode="Markdown")
+
         # Save to conversation history
         await ConversationManager.add_message(user_id, 'user', message)
         await ConversationManager.add_message(user_id, 'assistant', response)
@@ -143,8 +144,10 @@ async def summarize_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Format for Telegram
         formatted_answer = format_ai_response(answer)
-        await update.message.reply_text(f"**Summary: {topic}**\n\n{formatted_answer}", parse_mode='Markdown')
-        
+        await reply_text_chunked(
+            update, f"**Summary: {topic}**\n\n{formatted_answer}", parse_mode="Markdown"
+        )
+
         # Save to conversation history
         await ConversationManager.add_message(user_id, 'user', f'/summarize {topic}')
         await ConversationManager.add_message(user_id, 'assistant', answer)
@@ -185,8 +188,10 @@ async def explain_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Format for Telegram
         formatted_answer = format_ai_response(answer)
-        await update.message.reply_text(f"**Explanation: {term}**\n\n{formatted_answer}", parse_mode='Markdown')
-        
+        await reply_text_chunked(
+            update, f"**Explanation: {term}**\n\n{formatted_answer}", parse_mode="Markdown"
+        )
+
         # Save to conversation history
         await ConversationManager.add_message(user_id, 'user', f'/explain {term}')
         await ConversationManager.add_message(user_id, 'assistant', answer)
@@ -227,8 +232,10 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Format for Telegram
         formatted_analysis = format_ai_response(analysis)
-        await update.message.reply_text(f"**Analysis:**\n\n{formatted_analysis}", parse_mode='Markdown')
-        
+        await reply_text_chunked(
+            update, f"**Analysis:**\n\n{formatted_analysis}", parse_mode="Markdown"
+        )
+
         # Save to conversation history
         await ConversationManager.add_message(user_id, 'user', f'/analyze {text}')
         await ConversationManager.add_message(user_id, 'assistant', analysis)
@@ -269,8 +276,8 @@ async def think_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Format for Telegram
         formatted_answer = format_ai_response(answer)
-        await update.message.reply_text(formatted_answer, parse_mode='Markdown')
-        
+        await reply_text_chunked(update, formatted_answer, parse_mode="Markdown")
+
         # Save to conversation history
         await ConversationManager.add_message(user_id, 'user', f'/think {question}')
         await ConversationManager.add_message(user_id, 'assistant', answer)
@@ -331,8 +338,8 @@ async def websearch_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         formatted_summary = format_ai_response(summary)
         message += f"**AI Summary:**\n{formatted_summary}"
         
-        await update.message.reply_text(message, parse_mode='Markdown')
-        
+        await reply_text_chunked(update, message, parse_mode="Markdown")
+
         # Save to conversation history
         await ConversationManager.add_message(user_id, 'user', f'/websearch {query}')
         await ConversationManager.add_message(user_id, 'assistant', summary)
