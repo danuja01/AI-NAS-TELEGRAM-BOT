@@ -19,6 +19,23 @@ from database.memory import save_command
 logger = logging.getLogger(__name__)
 
 
+async def _try_delete_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Remove the user's message (e.g. /rootlogin with password) from the chat when allowed."""
+    msg = update.effective_message
+    if not msg:
+        return
+    try:
+        await context.bot.delete_message(
+            chat_id=msg.chat_id,
+            message_id=msg.message_id,
+        )
+    except Exception as e:
+        logger.info(
+            "Could not delete sensitive message (leave chat private; bot needs delete rights in groups): %s",
+            e,
+        )
+
+
 @require_auth
 @rate_limit
 async def rootlogin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -29,7 +46,8 @@ async def rootlogin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "❌ Usage: `/rootlogin <password>`\n\n"
             "⚠️ Root access grants full file system access for 30 minutes.\n"
-            "All root actions are logged for security audit.",
+            "All root actions are logged for security audit.\n\n"
+            "In private chat, your password message is deleted after this runs when Telegram allows it.",
             parse_mode='Markdown'
         )
         return
@@ -63,6 +81,8 @@ async def rootlogin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in rootlogin_command: {e}", exc_info=True)
         await update.message.reply_text(format_error(f"Root login failed: {e}"))
+    finally:
+        await _try_delete_user_message(update, context)
 
 
 @require_auth
