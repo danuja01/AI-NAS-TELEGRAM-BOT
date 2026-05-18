@@ -13,13 +13,14 @@ from utils.security import validate_path, sanitize_filename
 logger = logging.getLogger(__name__)
 
 
-def list_directory(path_str: str, user_id: int = None) -> List[Dict[str, Any]]:
+def list_directory(path_str: str, user_id: int = None, apply_filter: bool = True) -> List[Dict[str, Any]]:
     """
     List contents of a directory.
     
     Args:
         path_str: Directory path
         user_id: Optional user ID for root access validation
+        apply_filter: Whether to apply folder filtering at disk root level
     
     Returns:
         List of file/directory information
@@ -52,6 +53,20 @@ def list_directory(path_str: str, user_id: int = None) -> List[Dict[str, Any]]:
             except Exception as e:
                 logger.warning(f"Failed to stat {item}: {e}")
                 continue
+        
+        # Apply folder filtering if at disk root level
+        if apply_filter and hasattr(config, 'DISK_ROOT_PATH') and hasattr(config, 'VISIBLE_ROOT_FOLDERS'):
+            try:
+                disk_root = Path(config.DISK_ROOT_PATH).resolve()
+                if path == disk_root:
+                    # Filter to only show whitelisted folders and all files
+                    items = [
+                        item for item in items 
+                        if not item['is_dir'] or item['name'] in config.VISIBLE_ROOT_FOLDERS
+                    ]
+                    logger.info(f"Applied folder filter at disk root, showing {len(items)} items")
+            except Exception as e:
+                logger.warning(f"Failed to apply folder filter: {e}")
         
         return items
     
@@ -282,3 +297,59 @@ def get_storage_summary() -> List[Dict[str, Any]]:
             continue
     
     return summary
+
+
+def create_zip_archive(files: List[Dict[str, Any]], output_path: str, max_files: int = 50) -> tuple:
+    """
+    Create ZIP archive from file list.
+    
+    Args:
+        files: List of file dicts with 'path' and 'name'
+        output_path: Path for output ZIP file
+        max_files: Maximum number of files to include
+    
+    Returns:
+        Tuple of (success: bool, zip_path: str, total_size: int, error_msg: str)
+    """
+    import zipfile
+    
+    try:
+        # Limit number of files
+        if len(files) > max_files:
+            return (False, "", 0, f"Too many files. Maximum is {max_files} files per archive.")
+        
+        # Calculate total size before creating ZIP
+        total_size = 0
+        max_size = 2 * 1024 * 1024 * 1024  # 2GB limit
+        
+        for file_info in files:
+            file_path = Path(file_info['path'])
+            if file_path.exists() and file_path.is_file():
+                total_size += file_path.stat().st_size
+        
+        if total_size > max_size:
+            return (False, "", 0, f"Total size exceeds 2GB limit ({total_size / (1024**3):.2f} GB)")
+        
+        # Create ZIP archive
+        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for file_info in files:
+                file_path = Path(file_info['path'])
+                if file_path.exists() and file_path.is_file():
+                    try:
+                        # Use just the filename in the archive
+                        arcname = file_info['name']
+                        zipf.write(file_path, arcname=arcname)
+                        logger.info(f"Added to ZIP: {arcname}")
+                    except Exception as e:
+                        logger.warning(f"Failed to add {file_info['name']} to ZIP: {e}")
+                        continue
+        
+        # Get final ZIP size
+        zip_size = Path(output_path).stat().st_size
+        
+        logger.info(f"Created ZIP archive: {output_path} ({len(files)} files, {zip_size} bytes)")
+        return (True, output_path, zip_size, "")
+    
+    except Exception as e:
+        logger.error(f"Failed to create ZIP archive: {e}")
+        return (False, "", 0, str(e))

@@ -48,6 +48,10 @@ ALLOWED_PATHS = [
     if path.strip()
 ]
 
+# Folder Filtering Configuration
+DISK_ROOT_PATH = '/srv/dev-disk-by-uuid-9ac22f70-05c6-442f-993b-0d9ca1ae5988'
+VISIBLE_ROOT_FOLDERS = ['documents', 'media', 'photos', 'tutorials']
+
 # Root Access Password
 ROOT_PASSWORD = os.getenv("ROOT_PASSWORD", "")
 

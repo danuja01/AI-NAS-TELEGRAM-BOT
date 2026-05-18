@@ -89,6 +89,49 @@ class FileCache:
             return None
     
     @classmethod
+    def get_files(cls, user_id: int, numbers: List[int]) -> List[Dict[str, Any]]:
+        """
+        Retrieve multiple files by numbers from user's cache.
+        
+        Args:
+            user_id: Telegram user ID
+            numbers: List of file numbers (1-indexed)
+        
+        Returns:
+            List of file dictionaries (only valid files)
+        """
+        try:
+            if user_id not in cls._cache:
+                return []
+            
+            cache_entry = cls._cache[user_id]
+            
+            # Check if cache expired
+            age = datetime.now() - cache_entry['timestamp']
+            if age > cls.CACHE_DURATION:
+                logger.info(f"Cache expired for user {user_id}")
+                del cls._cache[user_id]
+                return []
+            
+            # Get files by numbers (1-indexed)
+            files = cache_entry['files']
+            result = []
+            
+            for number in numbers:
+                if 1 <= number <= len(files):
+                    file_info = files[number - 1]  # Convert to 0-indexed
+                    result.append(file_info)
+                else:
+                    logger.warning(f"File number {number} out of range for user {user_id}")
+            
+            logger.info(f"Retrieved {len(result)} files for user {user_id}")
+            return result
+        
+        except Exception as e:
+            logger.error(f"Failed to retrieve files from cache: {e}")
+            return []
+    
+    @classmethod
     def get_cache_info(cls, user_id: int) -> Optional[Dict[str, Any]]:
         """
         Get information about user's cache.

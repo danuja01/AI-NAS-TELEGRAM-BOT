@@ -45,3 +45,8 @@ Thumbs.db
 
 # docs
 docs/
+
+# db
+data/bot.db
+data/bot.db-shm
+data/bot.db-wal

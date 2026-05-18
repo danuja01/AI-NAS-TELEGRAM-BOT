@@ -23,8 +23,8 @@ class RootSessionManager:
     All root access is logged for security audit.
     """
     
-    # Store active sessions: {user_id: {'expires_at': datetime, 'started_at': datetime}}
-    _sessions: Dict[int, Dict[str, datetime]] = {}
+    # Store active sessions: {user_id: {'expires_at': datetime, 'started_at': datetime, 'working_dir': Optional[str]}}
+    _sessions: Dict[int, Dict[str, any]] = {}
     
     # Session duration (30 minutes)
     SESSION_DURATION = timedelta(minutes=30)
@@ -63,7 +63,8 @@ class RootSessionManager:
             
             cls._sessions[user_id] = {
                 'started_at': now,
-                'expires_at': expires_at
+                'expires_at': expires_at,
+                'working_dir': None
             }
             
             logger.warning(f"Root session created for user {user_id} (expires at {expires_at})")
@@ -114,6 +115,42 @@ class RootSessionManager:
         
         # Return default allowed paths
         return config.ALLOWED_PATHS
+    
+    @classmethod
+    def set_working_directory(cls, user_id: int, path: str) -> bool:
+        """
+        Set working directory for a user with active root session.
+        
+        Args:
+            user_id: Telegram user ID
+            path: Working directory path
+        
+        Returns:
+            True if successful, False if no active session
+        """
+        if not cls.is_root_session_active(user_id):
+            logger.warning(f"Attempted to set working dir for user {user_id} without active root session")
+            return False
+        
+        cls._sessions[user_id]['working_dir'] = path
+        logger.info(f"Working directory set for user {user_id}: {path}")
+        return True
+    
+    @classmethod
+    def get_working_directory(cls, user_id: int) -> Optional[str]:
+        """
+        Get current working directory for a user.
+        
+        Args:
+            user_id: Telegram user ID
+        
+        Returns:
+            Working directory path or None
+        """
+        if not cls.is_root_session_active(user_id):
+            return None
+        
+        return cls._sessions[user_id].get('working_dir')
     
     @classmethod
     def logout(cls, user_id: int) -> bool:

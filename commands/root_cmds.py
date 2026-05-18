@@ -250,3 +250,103 @@ async def ssh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Error: {str(e)}"
             )
         )
+
+
+@require_auth
+@rate_limit
+async def cd_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /cd <path> - Change working directory (root access required)."""
+    user_id = update.effective_user.id
+    
+    # Check if user has active root session
+    if not RootSessionManager.is_root_session_active(user_id):
+        await update.message.reply_text(
+            format_error(
+                "❌ **Root Access Required**\n\n"
+                "The `/cd` command requires an active root session.\n"
+                "Use `/rootlogin <password>` to gain access."
+            )
+        )
+        return
+    
+    if not context.args:
+        # Show current working directory
+        current_dir = RootSessionManager.get_working_directory(user_id)
+        if current_dir:
+            await update.message.reply_text(
+                f"📂 **Current Working Directory:**\n`{current_dir}`\n\n"
+                f"Use `/cd <path>` to change directory.",
+                parse_mode='Markdown'
+            )
+        else:
+            import config
+            default_path = config.DOCUMENT_PATH or '/app/documents'
+            await update.message.reply_text(
+                f"📂 **No Working Directory Set**\n\n"
+                f"Default path: `{default_path}`\n\n"
+                f"Use `/cd <path>` to set a working directory.",
+                parse_mode='Markdown'
+            )
+        return
+    
+    target_path = ' '.join(context.args)
+    
+    try:
+        # Validate the path exists and is a directory
+        from pathlib import Path
+        path = Path(target_path).resolve()
+        
+        if not path.exists():
+            await update.message.reply_text(
+                format_error(f"Path does not exist: `{target_path}`")
+            )
+            return
+        
+        if not path.is_dir():
+            await update.message.reply_text(
+                format_error(f"Path is not a directory: `{target_path}`")
+            )
+            return
+        
+        # Validate path is within allowed disk root
+        import config
+        if hasattr(config, 'DISK_ROOT_PATH'):
+            disk_root = Path(config.DISK_ROOT_PATH).resolve()
+            try:
+                path.relative_to(disk_root)
+            except ValueError:
+                await update.message.reply_text(
+                    format_error(
+                        f"❌ **Invalid Path**\n\n"
+                        f"Path must be within: `{config.DISK_ROOT_PATH}`"
+                    )
+                )
+                return
+        
+        # Set working directory
+        if RootSessionManager.set_working_directory(user_id, str(path)):
+            # Shorten path for display if it's long
+            display_path = str(path)
+            if len(display_path) > 60:
+                display_path = "..." + display_path[-57:]
+            
+            await update.message.reply_text(
+                format_success(
+                    f"📂 **Working Directory Changed**\n\n"
+                    f"**New Path:** `{display_path}`\n\n"
+                    f"💡 Use `/ls` to view contents\n"
+                    f"💡 Use `/cd` without arguments to see current directory"
+                )
+            )
+            await save_command(user_id, f'/cd {target_path}', 'Directory changed')
+            logger.warning(f"User {user_id} changed working directory to: {path}")
+        else:
+            await update.message.reply_text(
+                format_error("Failed to set working directory")
+            )
+    
+    except Exception as e:
+        logger.error(f"Error in cd_command: {e}", exc_info=True)
+        await update.message.reply_text(
+            format_error(f"Failed to change directory: {str(e)}")
+        )
