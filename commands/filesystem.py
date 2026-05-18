@@ -4,6 +4,8 @@ File system command handlers.
 
 import logging
 import os
+from pathlib import Path
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -18,6 +20,9 @@ from services.file_service import (
 from database.memory import save_conversation, save_command
 
 logger = logging.getLogger(__name__)
+
+# Bot API document upload limit (leave headroom under 50 MiB hard cap)
+TELEGRAM_DOCUMENT_MAX_BYTES = 49 * 1024 * 1024
 
 
 def parse_number_ranges(args: list) -> list:
@@ -338,34 +343,51 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
             
-            # Check file exists
-            if not os.path.exists(file_path):
+            # Check file exists and is a regular file (not a dir / broken symlink)
+            path_obj = Path(file_path)
+            if not path_obj.is_file():
                 await update.message.reply_text(
-                    format_error("File no longer exists")
+                    format_error("Path is not a regular file or no longer exists")
                 )
                 return
             
-            # Send file
+            file_size = path_obj.stat().st_size
+            if file_size > TELEGRAM_DOCUMENT_MAX_BYTES:
+                await update.message.reply_text(
+                    format_error(
+                        f"File too large for Telegram ({format_bytes(file_size)}). "
+                        f"Max is {format_bytes(TELEGRAM_DOCUMENT_MAX_BYTES)}. "
+                        "Use SSH or copy from the NAS directly for large files."
+                    )
+                )
+                return
+            
+            send_name = file_info.get('name') or path_obj.name
+            
+            # Send file (pass path string; PTB reads reliably; open file handles can fail on some mounts)
             status_msg = await update.message.reply_text(
-                f"📤 Preparing to send `{file_info['name']}`...",
+                f"📤 Preparing to send `{send_name}`...",
                 parse_mode='Markdown'
             )
             
             try:
-                with open(file_path, 'rb') as f:
-                    await update.message.reply_document(
-                        document=f,
-                        filename=file_info['name'],
-                        caption=f"📄 {file_info['name']}\nSize: {format_bytes(file_info['size'])}"
-                    )
+                await update.message.reply_document(
+                    document=str(path_obj.resolve()),
+                    filename=send_name,
+                    caption=f"📄 {send_name}\nSize: {format_bytes(file_size)}"
+                )
                 
                 await status_msg.delete()
-                logger.info(f"User {user_id} downloaded file: {file_info['name']}")
-                await save_command(user_id, f'/download {number}', file_info['name'])
+                logger.info(f"User {user_id} downloaded file: {send_name}")
+                await save_command(user_id, f'/download {number}', send_name)
             
             except Exception as e:
-                await status_msg.delete()
-                raise e
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
+                logger.error(f"Single-file send failed: {e}", exc_info=True)
+                raise
         
         else:
             # Multiple files - create ZIP
@@ -432,12 +454,26 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='Markdown'
                 )
                 
-                with open(zip_path, 'rb') as f:
-                    await update.message.reply_document(
-                        document=f,
-                        filename=zip_filename,
-                        caption=f"📦 Archive with {len(valid_files)} file(s)\nSize: {format_bytes(zip_size)}"
+                if zip_size > TELEGRAM_DOCUMENT_MAX_BYTES:
+                    await status_msg.delete()
+                    await update.message.reply_text(
+                        format_error(
+                            f"Archive too large for Telegram ({format_bytes(zip_size)}). "
+                            f"Max is {format_bytes(TELEGRAM_DOCUMENT_MAX_BYTES)}. "
+                            "Download fewer files or smaller items."
+                        )
                     )
+                    try:
+                        os.unlink(temp_zip_path)
+                    except OSError:
+                        pass
+                    return
+                
+                await update.message.reply_document(
+                    document=str(Path(zip_path).resolve()),
+                    filename=zip_filename,
+                    caption=f"📦 Archive with {len(valid_files)} file(s)\nSize: {format_bytes(zip_size)}"
+                )
                 
                 await status_msg.delete()
                 
@@ -451,14 +487,17 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await save_command(user_id, f'/download {" ".join(map(str, numbers))}', f"{len(valid_files)} files")
             
             except Exception as e:
-                await status_msg.delete()
-                # Clean up temp file on error
                 try:
-                    if 'temp_zip_path' in locals():
-                        os.unlink(temp_zip_path)
-                except:
+                    await status_msg.delete()
+                except Exception:
                     pass
-                raise e
+                if 'temp_zip_path' in locals():
+                    try:
+                        os.unlink(temp_zip_path)
+                    except OSError:
+                        pass
+                logger.error(f"Bulk download / ZIP send failed: {e}", exc_info=True)
+                raise
         
     except ValueError as e:
         await update.message.reply_text(

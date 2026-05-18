@@ -6,6 +6,8 @@ Allows temporary elevated access to all file system paths.
 import logging
 import subprocess
 import asyncio
+from pathlib import Path
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -323,8 +325,6 @@ async def cd_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Validate the path exists and is a directory
-        from pathlib import Path
-        
         # Handle relative paths based on current working directory
         if not target_path.startswith('/'):
             # Relative path - join with current working directory
