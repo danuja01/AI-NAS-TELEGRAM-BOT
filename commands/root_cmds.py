@@ -275,8 +275,11 @@ async def cd_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if current_dir:
             await update.message.reply_text(
                 f"📂 **Current Working Directory:**\n`{current_dir}`\n\n"
-                f"💡 Use `/cd <path>` to change directory\n"
-                f"💡 Use `/cd root` for disk root",
+                f"**Navigation:**\n"
+                f"• `/cd <path>` - Change to absolute path\n"
+                f"• `/cd media` - Change to media (relative)\n"
+                f"• `/cd root` - Go to disk root\n"
+                f"• `/cd ..` - Go up one directory",
                 parse_mode='Markdown'
             )
         else:
@@ -285,9 +288,11 @@ async def cd_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"📂 **No Working Directory Set**\n\n"
                 f"Default path: `{default_path}`\n\n"
-                f"**Usage:**\n"
-                f"• `/cd <path>` - Change to specific path\n"
-                f"• `/cd root` - Change to disk root\n"
+                f"**Navigation:**\n"
+                f"• `/cd <path>` - Change to absolute path\n"
+                f"• `/cd media` - Relative path navigation\n"
+                f"• `/cd root` - Go to disk root\n"
+                f"• `/cd ..` - Go up one directory\n"
                 f"• `/cd` - Show current directory",
                 parse_mode='Markdown'
             )
@@ -305,10 +310,32 @@ async def cd_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 format_error("DISK_ROOT_PATH not configured in settings")
             )
             return
+    elif target_path == '..':
+        # Go up one directory
+        current_dir = RootSessionManager.get_working_directory(user_id)
+        if current_dir:
+            target_path = str(Path(current_dir).parent)
+        else:
+            await update.message.reply_text(
+                format_error("No working directory set. Use `/cd <path>` first.")
+            )
+            return
     
     try:
         # Validate the path exists and is a directory
         from pathlib import Path
+        
+        # Handle relative paths based on current working directory
+        if not target_path.startswith('/'):
+            # Relative path - join with current working directory
+            current_dir = RootSessionManager.get_working_directory(user_id)
+            if current_dir:
+                target_path = str(Path(current_dir) / target_path)
+            else:
+                # No working directory set, use DOCUMENT_PATH as base
+                base_path = config.DOCUMENT_PATH or '/app/documents'
+                target_path = str(Path(base_path) / target_path)
+        
         path = Path(target_path).resolve()
         
         if not path.exists():

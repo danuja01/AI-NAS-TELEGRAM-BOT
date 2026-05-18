@@ -80,11 +80,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 **📁 File System**
 `/files` - Browse default document path
 `/ls [path]` - List directory with numbered files
-`/download <number>` - Download file from list
+`/ls --all` - Show all folders (including hidden)
+`/download <number>` - Download single file
+`/download 1-3 7` - Bulk download as ZIP
 `/uploadfile [subfolder]` - Upload file (requires root)
 `/find <filename>` - Search for files
 `/tree [path]` - Show directory tree
 `/storage` - Storage usage summary
+`/cd <path>` - Change working directory (requires root)
+`/cd root` - Go to disk root (requires root)
+`/cd` - Show current directory
 
 **⚙️ Services**
 `/services` - List system services
@@ -108,6 +113,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/rootstatus` - Check root session status
 `/rootlogout` - End root session
 `/ssh <command>` - Execute shell commands (requires root)
+`/cd <path>` - Navigate to any directory (requires root)
 
 **ℹ️ General**
 `/start` - Welcome message
@@ -118,9 +124,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • After /cpu, you can ask "why is it high?"
 • After /docker, you can say "restart the first one"
 • Use /clear to start a fresh conversation
+
+**📁 File Management Tips:**
+• `/ls` uses your working directory (set with /cd)
+• `/cd root` → `/ls` shows: documents/, media/, photos/, tutorials/
+• `/ls --all` reveals hidden system folders at disk root
+• `/download 1-3 5-7` downloads files 1,2,3,5,6,7 as ZIP
+• Cache expires after 10 minutes, re-run /ls if needed
 • Root access grants full file system access - use with caution!
-• `/ls DANUJA` shows /app/documents/DANUJA/ contents
-• `/ssh ls` shows documents folder by default
 """
     
     await update.message.reply_text(help_msg, parse_mode='Markdown')
