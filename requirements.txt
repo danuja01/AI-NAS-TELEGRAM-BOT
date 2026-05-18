@@ -20,8 +20,8 @@ pypandoc==1.12
 # System Monitoring
 psutil==5.9.8
 
-# Docker
-docker==7.0.0
+# Docker (7.1.0+ includes fix for requests 2.32+ compatibility)
+docker>=7.1.0
 
 # Database
 aiosqlite==0.19.0
@@ -33,7 +33,7 @@ APScheduler==3.10.4
 python-dotenv==1.0.1
 
 # HTTP Requests
-requests==2.31.0  # Pinned for Docker SDK compatibility
+requests>=2.32.5
 aiohttp==3.9.3
 
 # Utilities
