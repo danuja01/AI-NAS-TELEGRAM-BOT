@@ -316,7 +316,9 @@ def format_health_score(score: int, issues: List[str]) -> str:
     if issues:
         msg += "**Issues:**\n"
         for issue in issues:
-            msg += f"⚠️ {issue}\n"
+            # Escape special Markdown characters in issue text
+            escaped_issue = issue.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
+            msg += f"⚠️ {escaped_issue}\n"
     else:
         msg += "✅ No issues detected\n"
     
