@@ -301,46 +301,13 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(format_error(f"Download failed: {e}"))
 
 
-@require_auth
-@rate_limit
-async def upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /uploadfile - Upload file to documents folder (requires root)."""
+async def _process_file_upload(update: Update, file_obj, filename: str, subfolder: str = None):
+    """Internal helper to process file upload."""
     user_id = update.effective_user.id
     
-    # Check root access
-    from utils.root_session import RootSessionManager
-    if not RootSessionManager.is_root_session_active(user_id):
-        await update.message.reply_text(
-            format_error(
-                "❌ **Root Access Required**\n\n"
-                "File uploads require an active root session.\n"
-                "Use `/rootlogin <password>` first."
-            )
-        )
-        return
-    
-    # Check if file is attached
-    if not update.message.document:
-        await update.message.reply_text(
-            "📤 **Upload File to NAS**\n\n"
-            "**Usage:**\n"
-            "1. Use `/uploadfile <subfolder>` (optional)\n"
-            "2. Attach your file to the message\n\n"
-            "**Examples:**\n"
-            "• `/uploadfile DANUJA` (upload to /app/documents/DANUJA/)\n"
-            "• `/uploadfile` (upload to /app/documents/)\n\n"
-            "⚠️ Root access is required for uploads.",
-            parse_mode='Markdown'
-        )
-        return
-    
     try:
-        document = update.message.document
-        filename = document.file_name
-        
         # Determine target folder
-        if context.args:
-            subfolder = ' '.join(context.args)
+        if subfolder:
             target_dir = os.path.join('/app/documents', subfolder)
         else:
             target_dir = '/app/documents'
@@ -349,7 +316,7 @@ async def upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.makedirs(target_dir, exist_ok=True)
         
         # Get file from Telegram
-        file = await document.get_file()
+        file = await file_obj.get_file()
         target_path = os.path.join(target_dir, filename)
         
         # Check if file already exists
@@ -386,3 +353,96 @@ async def upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Upload error: {e}", exc_info=True)
         await update.message.reply_text(format_error(f"Upload failed: {e}"))
+
+
+@require_auth
+@rate_limit
+async def upload_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /uploadfile - Upload file to documents folder (requires root)."""
+    user_id = update.effective_user.id
+    
+    # Check root access
+    from utils.root_session import RootSessionManager
+    if not RootSessionManager.is_root_session_active(user_id):
+        await update.message.reply_text(
+            format_error(
+                "❌ **Root Access Required**\n\n"
+                "File uploads require an active root session.\n"
+                "Use `/rootlogin <password>` first."
+            )
+        )
+        return
+    
+    # Check if file is attached
+    if not update.message.document and not update.message.photo:
+        await update.message.reply_text(
+            "📤 **Upload File to NAS**\n\n"
+            "**Usage:**\n"
+            "1. Attach a file/photo and use `/uploadfile <subfolder>` as caption (optional)\n"
+            "2. Or send `/uploadfile <subfolder>` and then attach file\n\n"
+            "**Examples:**\n"
+            "• Send file with caption: `/uploadfile DANUJA`\n"
+            "• Send file with caption: `/uploadfile` (uploads to /app/documents/)\n\n"
+            "⚠️ Root access is required for uploads.",
+            parse_mode='Markdown'
+        )
+        return
+    
+    # Get document or photo
+    if update.message.document:
+        file_obj = update.message.document
+        filename = file_obj.file_name
+    elif update.message.photo:
+        # Get the largest photo
+        file_obj = update.message.photo[-1]
+        filename = f"photo_{file_obj.file_unique_id}.jpg"
+    else:
+        await update.message.reply_text(format_error("No file attached"))
+        return
+    
+    # Get subfolder from command args
+    subfolder = ' '.join(context.args) if context.args else None
+    
+    await _process_file_upload(update, file_obj, filename, subfolder)
+
+
+@require_auth
+@rate_limit
+async def handle_file_with_caption(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle files/photos sent with /uploadfile in caption."""
+    user_id = update.effective_user.id
+    
+    # Check if caption starts with /uploadfile
+    caption = update.message.caption or ""
+    if not caption.startswith('/uploadfile'):
+        return
+    
+    # Check root access
+    from utils.root_session import RootSessionManager
+    if not RootSessionManager.is_root_session_active(user_id):
+        await update.message.reply_text(
+            format_error(
+                "❌ **Root Access Required**\n\n"
+                "File uploads require an active root session.\n"
+                "Use `/rootlogin <password>` first."
+            )
+        )
+        return
+    
+    # Parse caption for subfolder argument
+    parts = caption.split()
+    subfolder = ' '.join(parts[1:]) if len(parts) > 1 else None
+    
+    # Get document or photo
+    if update.message.document:
+        file_obj = update.message.document
+        filename = file_obj.file_name
+    elif update.message.photo:
+        # Get the largest photo
+        file_obj = update.message.photo[-1]
+        filename = f"photo_{file_obj.file_unique_id}.jpg"
+    else:
+        await update.message.reply_text(format_error("No file attached"))
+        return
+    
+    await _process_file_upload(update, file_obj, filename, subfolder)

@@ -100,6 +100,12 @@ def main():
     application.add_handler(CommandHandler("download", filesystem.download_command))
     application.add_handler(CommandHandler("uploadfile", filesystem.upload_command))
     
+    # Register message handler for file uploads with caption
+    application.add_handler(MessageHandler(
+        filters.Document.ALL | filters.PHOTO,
+        filesystem.handle_file_with_caption
+    ))
+    
     # Register command handlers - Service Management
     application.add_handler(CommandHandler("services", service.services_command))
     application.add_handler(CommandHandler("restart_service", service.restart_service_command))
