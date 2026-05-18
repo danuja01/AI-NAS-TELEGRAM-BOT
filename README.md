@@ -1,425 +1,314 @@
 # NAS Telegram AI Assistant
 
-A comprehensive self-hosted Telegram AI assistant for managing your NAS server. Features system monitoring, Docker management, file operations, AI-powered document Q&A with RAG, automated alerts, and intelligent conversation history.
+A comprehensive self-hosted Telegram AI assistant for managing your NAS server. Features system monitoring, Docker management, secure file operations (browse, download, upload), AI-powered document Q&A with RAG, temporary root access with SSH commands, automated alerts, and intelligent conversation history.
+
+## Documentation
+
+**Full documentation is available on the [GitHub Wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki).**
+
+| Topic | Wiki page |
+|-------|-----------|
+| Quick start & overview | [Home](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Home) |
+| Bare metal install | [Installation](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Installation) |
+| Docker deploy (recommended) | [Docker Deployment](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Docker-Deployment) |
+| All `.env` options | [Configuration Guide](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Configuration-Guide) |
+| API keys setup | [API Setup](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/API-Setup) |
+| Every command | [Commands Reference](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Commands-Reference) |
+| AI & RAG | [AI and RAG](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/AI-and-RAG) |
+| Root access & `/ssh` | [Root Access and SSH](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Root-Access-and-SSH) |
+| Troubleshooting | [Troubleshooting](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Troubleshooting) |
+| FAQ | [FAQ](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/FAQ) |
+
+**In-repo docs** (shorter guides):
+
+- [`docs/DOCKER_DEPLOYMENT.md`](docs/DOCKER_DEPLOYMENT.md) — Docker quick reference
+- [`docs/ROOT_ACCESS_GUIDE.md`](docs/ROOT_ACCESS_GUIDE.md) — Root login and SSH usage
+- [`QUICKSTART.md`](QUICKSTART.md) — Minimal local test setup
+
+---
+
+## Quick Start (Docker)
+
+```bash
+git clone https://github.com/danuja01/AI-NAS-TELEGRAM-BOT.git
+cd AI-NAS-TELEGRAM-BOT/BOT
+
+cp .env.example .env
+# Edit .env: TELEGRAM_TOKEN, OPENAI_API_KEY, ALLOWED_USER_IDS, ROOT_PASSWORD
+
+mkdir -p data logs documents
+docker-compose up -d
+docker-compose logs -f
+```
+
+In Telegram: `/start` → `/index` → `/help`
+
+See the [Docker Deployment wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Docker-Deployment) for volume mounts, updates, and NAS-specific paths.
+
+---
 
 ## Features
 
-### 🖥 System Monitoring
-- Real-time CPU, RAM, disk, and temperature monitoring
-- SMART drive health tracking
-- Network statistics with Tailscale IP detection
-- System health scoring with automatic issue detection
+### System Monitoring
+- Real-time CPU, RAM, disk, temperature, and network stats
+- SMART drive health (`/smart`, `/drives`)
+- System health scoring (`/health`)
+- Tailscale IP detection
+- Automated alerts (disk, CPU, memory, temperature, SMART, container crashes)
 
-### 🐳 Docker Management
-- List and monitor all containers with resource usage
-- Start, stop, and restart containers
-- View container logs
-- Automatic unhealthy container detection
+### Docker Management
+- List containers with CPU/RAM usage (`/docker`)
+- Start, stop, restart containers
+- View logs (`/logs`)
+- Requires Docker socket access (mounted in `docker-compose.yml`)
 
-### 📁 File System
-- Secure file browsing with path restrictions
-- File search across directories
-- Directory tree visualization
-- Storage usage analysis
+### File System
+- Secure browsing with path restrictions (`ALLOWED_PATHS`)
+- Numbered file listings (`/ls`) for easy selection
+- Download files by number (`/download`)
+- Upload files with root access (`/uploadfile`)
+- Search (`/find`), directory tree (`/tree`), storage analysis (`/storage`)
+- Relative paths resolve under `DOCUMENT_PATH` (e.g. `/ls DANUJA`)
 
-### ⚙️ Service Management
-- Control systemd services
-- System reboot/shutdown with confirmations
-- Service status monitoring
+### Root Access & SSH
+- Temporary elevated access for 30 minutes (`/rootlogin`)
+- Full filesystem access when root session is active
+- Execute shell commands via `/ssh` (logged, 60s timeout)
+- Session status and early logout (`/rootstatus`, `/rootlogout`)
 
-### 🤖 AI Assistant (RAG-Powered)
-- **Document Q&A**: Ask questions about your documents using RAG
-- **Conversation History**: Natural follow-up questions with context awareness (last 10 messages)
-- **Internet Search**: Search the web with AI-powered summaries
-- **Multiple AI Models**:
-  - `gpt-4o-mini` (default) - Fast and efficient for most tasks
-  - `o1-mini` (thinking) - Advanced reasoning for complex problems
-  - `tinyllama` (local fallback) - Optional local processing
+### AI Assistant (RAG)
+- Document Q&A from your files (`/ask`) — PDF, DOCX, TXT, MD
+- Conversation history (last 10 messages) for natural follow-ups
+- Internet search with AI summary (`/websearch`)
+- Models (configurable in `.env`):
+  - `gpt-5.4-nano` — default, fast
+  - `o3-mini` — thinking / complex tasks (`/analyze`, `/think`)
+  - `gpt-4o-mini` — fallback
+- Optional: Ollama for local fallback
 
-### 📊 Automated Alerts
-- Low disk space warnings
-- High CPU/memory usage alerts
-- Temperature monitoring
-- Docker container crashes
-- SMART drive health issues
+### Service Management
+- List and restart systemd services (bare metal; graceful skip in Docker)
+- Reboot/shutdown with confirmation
 
-### 🔒 Security
-- User whitelist authentication
+### Security
+- User whitelist (`ALLOWED_USER_IDS`)
 - Rate limiting (10 commands/minute)
-- Path validation and sanitization
-- Confirmation dialogs for dangerous operations
-- Complete audit logging
+- Path validation and audit logging
+- Password-protected root sessions
+
+---
 
 ## Prerequisites
 
-- **Python 3.10+**
-- **Debian/Ubuntu Linux** (for NAS features)
-- **OpenAI API key** (required for AI features)
-- **Telegram Bot Token**
-- **Optional**: Serper or Tavily API key (for web search)
-- **Optional**: Ollama installed locally (for fallback)
-
-### System Requirements
+- **Python 3.11+** (bare metal) or **Docker** (recommended)
+- **OpenAI API key** (required for AI)
+- **Telegram bot token** ([@BotFather](https://t.me/BotFather))
+- **Optional**: Serper or Tavily API key (web search)
+- **Optional**: `smartmontools` (SMART monitoring; included in Docker image)
 
 ```bash
-sudo apt update
-sudo apt install -y smartmontools  # For SMART drive monitoring
+# Bare metal only
+sudo apt install -y smartmontools
 ```
+
+---
 
 ## Installation
 
-### 1. Clone and Setup
+### Option A: Docker (recommended)
 
 ```bash
-cd ~/
-git clone <your-repo-url> nas-bot
-cd nas-bot/BOT
-```
-
-### 2. Create Virtual Environment
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment
-
-Copy the example env file and edit it:
-
-```bash
+cd BOT
 cp .env.example .env
 nano .env
+docker-compose up -d
 ```
 
-**Required Configuration**:
+Details: [Docker Deployment wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Docker-Deployment) · [`docs/DOCKER_DEPLOYMENT.md`](docs/DOCKER_DEPLOYMENT.md)
 
-```env
-# Get from @BotFather on Telegram
-TELEGRAM_TOKEN=your_telegram_bot_token
-
-# Get from https://platform.openai.com/api-keys
-OPENAI_API_KEY=your_openai_api_key
-
-# Your Telegram user ID (get from @userinfobot)
-ALLOWED_USER_IDS=123456789
-
-# Path to your documents for RAG
-DOCUMENT_PATH=/path/to/your/documents
-ALLOWED_PATHS=/path/to/your/documents,/other/allowed/path
-```
-
-**Optional Configuration**:
-
-```env
-# For internet search (optional but recommended)
-SERPER_API_KEY=your_serper_key  # Get from https://serper.dev
-TAVILY_API_KEY=your_tavily_key  # Get from https://tavily.com
-
-# For local AI fallback (optional)
-OLLAMA_URL=http://localhost:11434/api/generate
-```
-
-### 5. Get Your Telegram User ID
-
-1. Start a chat with [@userinfobot](https://t.me/userinfobot)
-2. It will reply with your user ID
-3. Add it to `ALLOWED_USER_IDS` in `.env`
-
-### 6. First Run
+### Option B: Bare metal
 
 ```bash
+cd BOT
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+nano .env
 python bot.py
 ```
 
-## Usage
+Details: [Installation wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Installation)
 
-### Initial Setup
+### Required `.env` variables
 
-1. Start the bot: `/start`
-2. Index your documents: `/index`
-3. Test system monitoring: `/status`
-
-### Monitoring Commands
-
-```
-/status      - Comprehensive system overview
-/cpu         - CPU usage and load
-/ram         - Memory statistics
-/disk        - Disk usage
-/temps       - Temperature sensors
-/network     - Network statistics
-/uptime      - System uptime
-/health      - System health score
-/smart       - Drive health (SMART data)
+```env
+TELEGRAM_TOKEN=your_bot_token
+OPENAI_API_KEY=sk-your_openai_key
+ALLOWED_USER_IDS=your_telegram_user_id
+DOCUMENT_PATH=/path/to/documents
+ALLOWED_PATHS=/path/to/documents
+ROOT_PASSWORD=your_secure_password
 ```
 
-### Docker Commands
+Get your Telegram user ID from [@userinfobot](https://t.me/userinfobot). Full reference: [Configuration Guide](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Configuration-Guide).
 
-```
-/docker              - List all containers
-/restart <name>      - Restart a container
-/stop <name>         - Stop a container
-/start <name>        - Start a container
-/logs <name> [lines] - View container logs
-```
+---
 
-### File System Commands
+## Command overview
 
-```
-/files          - Browse default document path
-/ls <path>      - List directory contents
-/search <name>  - Search for files
-/tree [path]    - Show directory tree
-/storage        - Storage usage summary
-```
+Use `/help` in Telegram for the full list. Highlights:
 
-### AI Commands
+| Category | Commands |
+|----------|----------|
+| Monitoring | `/status`, `/cpu`, `/ram`, `/disk`, `/temps`, `/network`, `/uptime`, `/health`, `/smart`, `/drives` |
+| Docker | `/docker`, `/restart`, `/stop`, `/start`, `/logs` |
+| Files | `/files`, `/ls`, `/download`, `/uploadfile`, `/find`, `/tree`, `/storage` |
+| AI | `/ask`, `/chat`, `/summarize`, `/explain`, `/analyze`, `/think`, `/websearch`, `/index`, `/clear` |
+| Root | `/rootlogin`, `/rootstatus`, `/rootlogout`, `/ssh` |
+| Services | `/services`, `/restart_service`, `/reboot`, `/shutdown` |
 
-```
-/ask <question>    - Ask about your documents (RAG)
-/chat <message>    - General AI chat
-/summarize <topic> - Summarize documents
-/explain <term>    - Explain from documents
-/analyze <text>    - Deep analysis (o1-mini)
-/think <question>  - Complex reasoning
-/search <query>    - Internet search with AI summary
-/clear             - Clear conversation history
-```
+**Tips:**
+- After `/ls`, use `/download 1` to fetch file #1 (cache lasts ~10 minutes)
+- `/uploadfile` and `/ssh` require an active root session
+- `/ssh ls` defaults to the documents folder in Docker (`/app/documents`)
 
-### Service Commands
+Complete reference: [Commands Reference wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Commands-Reference)
 
-```
-/services                - List system services
-/restart_service <name>  - Restart a service
-/reboot                  - Reboot system (requires confirmation)
-/shutdown                - Shutdown system (requires confirmation)
-```
+---
 
-## Conversation History Feature
+## Conversation history
 
-The bot remembers your last 10 messages and command outputs, enabling natural follow-up questions:
+The bot remembers your last 10 messages and command outputs:
 
-**Example 1:**
 ```
 You: /cpu
 Bot: CPU Usage: 90%
 
-You: /ask why is it so high?
-Bot: [Retrieves "CPU: 90%" from history and provides contextual answer]
+You: why is it so high?
+Bot: [Uses prior context to explain]
 ```
 
-**Example 2:**
-```
-You: /docker
-Bot: Lists: nginx (running), postgres (running), redis (stopped)
+Use `/clear` to reset context.
 
-You: restart the last one
-Bot: [Knows you mean redis from previous output]
-     Restarting redis container...
-```
-
-Use `/clear` to start a fresh conversation.
+---
 
 ## Deployment
 
-### Run as Background Service
+| Method | Guide |
+|--------|--------|
+| Docker Compose | [Wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Docker-Deployment) |
+| systemd service | [Wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Deployment-Options) |
+| Synology / QNAP | [Wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Deployment-Options) |
 
-Create a systemd service file:
-
+**Update (Docker):**
 ```bash
-sudo nano /etc/systemd/system/nas-bot.service
+docker-compose down
+git pull
+docker-compose build --no-cache
+docker-compose up -d
 ```
 
-```ini
-[Unit]
-Description=NAS Telegram AI Assistant
-After=network.target
+---
 
-[Service]
-Type=simple
-User=your_username
-WorkingDirectory=/home/your_username/nas-bot/BOT
-Environment="PATH=/home/your_username/nas-bot/BOT/venv/bin"
-ExecStart=/home/your_username/nas-bot/BOT/venv/bin/python bot.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-
-```bash
-sudo systemctl enable nas-bot
-sudo systemctl start nas-bot
-sudo systemctl status nas-bot
-```
-
-View logs:
-
-```bash
-sudo journalctl -u nas-bot -f
-```
-
-### Or Use Screen/Tmux
-
-```bash
-screen -S nas-bot
-cd ~/nas-bot/BOT
-source venv/bin/activate
-python bot.py
-
-# Detach with Ctrl+A, D
-# Reattach with: screen -r nas-bot
-```
-
-## Permissions
-
-### Docker Access
-
-Add your user to the docker group:
-
-```bash
-sudo usermod -aG docker $USER
-# Logout and login again
-```
-
-### SMART Monitoring
-
-Allow smartctl without sudo:
-
-```bash
-sudo visudo
-# Add: your_username ALL=(ALL) NOPASSWD: /usr/sbin/smartctl
-```
-
-Or run the bot as root (not recommended for production).
-
-## Troubleshooting
-
-### Bot doesn't respond
-- Check TELEGRAM_TOKEN is correct
-- Verify ALLOWED_USER_IDS contains your user ID
-- Check logs: `tail -f logs/bot.log`
-
-### No documents found for RAG
-- Verify DOCUMENT_PATH exists and contains supported files (PDF, DOCX, TXT, MD)
-- Ensure ALLOWED_PATHS includes DOCUMENT_PATH
-- Run `/index` to index documents
-
-### Docker commands fail
-- Ensure Docker is running: `sudo systemctl status docker`
-- Check user has Docker permissions: `groups $USER`
-- Test: `docker ps`
-
-### SMART data unavailable
-- Install smartmontools: `sudo apt install smartmontools`
-- Check permissions: `sudo smartctl -a /dev/sda`
-- Configure passwordless sudo for smartctl (see Permissions)
-
-### AI responses fail
-- Verify OPENAI_API_KEY is valid
-- Check internet connection
-- Review logs for specific errors
-
-### High memory usage
-- ChromaDB and embeddings use memory
-- Consider limiting indexed documents
-- Use a machine with at least 4GB RAM
-
-## Architecture
+## Project structure
 
 ```
 BOT/
-├── bot.py                 # Main entry point
-├── config.py              # Configuration
-├── .env                   # Environment variables
-├── commands/              # Command handlers
-│   ├── basic.py          # /start, /help
-│   ├── monitoring.py     # System monitoring commands
-│   ├── docker_cmds.py    # Docker management
-│   ├── filesystem.py     # File operations
-│   ├── ai_cmds.py        # AI/RAG commands
-│   └── service.py        # Service management
-├── services/             # Business logic
-│   ├── system_monitor.py
-│   ├── docker_service.py
-│   ├── smart_monitor.py
-│   ├── file_service.py
-│   └── service_manager.py
-├── ai/                   # AI components
-│   ├── gpt_client.py
-│   ├── rag_engine.py
-│   ├── conversation_history.py
-│   ├── search_engine.py
-│   ├── document_loader.py
-│   ├── embeddings.py
-│   └── ollama_client.py
-├── monitoring/           # Alerts
-│   ├── health_checker.py
-│   └── alerts.py
-├── database/             # SQLite storage
-│   ├── models.py
-│   └── memory.py
-├── utils/                # Utilities
+├── bot.py                 # Entry point
+├── config.py
+├── docker-compose.yml
+├── Dockerfile
+├── commands/
+│   ├── basic.py           # /start, /help
+│   ├── monitoring.py
+│   ├── docker_cmds.py
+│   ├── filesystem.py      # /ls, /download, /uploadfile
+│   ├── ai_cmds.py
+│   ├── service.py
+│   └── root_cmds.py       # /rootlogin, /ssh
+├── services/
+├── ai/                    # RAG, GPT, search
+├── database/
+├── monitoring/
+├── utils/
 │   ├── security.py
-│   ├── formatters.py
-│   └── logger.py
-├── logs/                 # Log files
-└── data/                 # Database and ChromaDB
+│   ├── root_session.py
+│   └── file_cache.py
+├── docs/
+├── data/
+└── logs/
 ```
 
-## API Costs
+Architecture details: [Architecture wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Architecture)
 
-Approximate OpenAI API costs (as of 2024):
-- `gpt-4o-mini`: ~$0.15 per 1M input tokens, ~$0.60 per 1M output tokens
-- `o1-mini`: ~$3 per 1M input tokens, ~$12 per 1M output tokens
+---
 
-Tips to minimize costs:
-- Use `/clear` to reset conversation history
-- Use Ollama for trivial tasks (if configured)
-- Limit document indexing to relevant files only
+## Troubleshooting
 
-## Security Best Practices
+| Issue | See |
+|-------|-----|
+| Bot won't start / no response | [Troubleshooting wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Troubleshooting) |
+| Docker commands fail | Mount `/var/run/docker.sock` in `docker-compose.yml` |
+| SMART not found | Rebuild Docker image (`smartmontools` in Dockerfile) |
+| Path access denied | Use relative `/ls DANUJA` or `/rootlogin` |
+| Telegram conflict | Only one bot instance running |
 
-1. **Never commit `.env` file** - Contains sensitive tokens
-2. **Use strong API keys** - Rotate regularly
-3. **Limit ALLOWED_USER_IDS** - Only trusted users
-4. **Restrict ALLOWED_PATHS** - Minimal file system access
-5. **Review logs regularly** - Monitor for suspicious activity
-6. **Keep dependencies updated** - `pip install --upgrade -r requirements.txt`
+Logs: `tail -f logs/bot.log` or `docker-compose logs -f`
+
+---
+
+## API costs
+
+Approximate OpenAI usage (varies by model and volume):
+
+- Light (≈10 queries/day): ~$5–10/month
+- Medium (≈50/day): ~$20–40/month
+
+Use `/clear`, prefer `gpt-5.4-nano` for routine tasks, and set billing limits on your OpenAI account.
+
+---
+
+## Security
+
+1. Never commit `.env`
+2. Use a strong `ROOT_PASSWORD`
+3. Limit `ALLOWED_USER_IDS` to trusted users
+4. Restrict `ALLOWED_PATHS` to what you need
+5. Review logs for root/SSH activity
+
+Full guide: [Security wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Security)
+
+---
 
 ## Contributing
 
-Contributions are welcome! Please:
+Contributions welcome! See [Development and Contributing](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Development-and-Contributing).
+
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+3. Submit a pull request
+
+---
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT License — see LICENSE file for details.
+
+---
 
 ## Support
 
-For issues and questions:
-- Check the troubleshooting section
-- Review logs in `logs/bot.log`
-- Open an issue on GitHub
+- **[GitHub Wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki)** — primary documentation
+- **[Issues](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/issues)** — bugs and feature requests
+- Logs: `logs/bot.log` or `docker-compose logs -f`
+
+---
 
 ## Acknowledgments
 
-- Built with [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
-- AI powered by [OpenAI](https://openai.com/)
-- RAG with [ChromaDB](https://www.trychroma.com/) and [sentence-transformers](https://www.sbert.net/)
-- System monitoring with [psutil](https://github.com/giampaolo/psutil)
-- Docker management with [Docker SDK](https://docker-py.readthedocs.io/)
+- [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
+- [OpenAI](https://openai.com/)
+- [ChromaDB](https://www.trychroma.com/) & [sentence-transformers](https://www.sbert.net/)
+- [psutil](https://github.com/giampaolo/psutil)
+- [Docker SDK for Python](https://docker-py.readthedocs.io/)
