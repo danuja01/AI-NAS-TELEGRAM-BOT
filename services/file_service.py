@@ -57,14 +57,17 @@ def list_directory(path_str: str, user_id: int = None, apply_filter: bool = True
         # Apply folder filtering if at disk root level
         if apply_filter and hasattr(config, 'DISK_ROOT_PATH') and hasattr(config, 'VISIBLE_ROOT_FOLDERS'):
             try:
-                disk_root = Path(config.DISK_ROOT_PATH).resolve()
-                if path == disk_root:
-                    # Filter to only show whitelisted folders and all files
-                    items = [
-                        item for item in items 
-                        if not item['is_dir'] or item['name'] in config.VISIBLE_ROOT_FOLDERS
-                    ]
-                    logger.info(f"Applied folder filter at disk root, showing {len(items)} items")
+                # Only apply filter if disk root path exists
+                disk_root_path = Path(config.DISK_ROOT_PATH)
+                if disk_root_path.exists():
+                    disk_root = disk_root_path.resolve()
+                    if path == disk_root:
+                        # Filter to only show whitelisted folders and all files
+                        items = [
+                            item for item in items 
+                            if not item['is_dir'] or item['name'] in config.VISIBLE_ROOT_FOLDERS
+                        ]
+                        logger.info(f"Applied folder filter at disk root, showing {len(items)} items")
             except Exception as e:
                 logger.warning(f"Failed to apply folder filter: {e}")
         

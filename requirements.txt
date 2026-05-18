@@ -33,7 +33,7 @@ APScheduler==3.10.4
 python-dotenv==1.0.1
 
 # HTTP Requests
-requests>=2.34.0
+requests==2.31.0  # Pinned for Docker SDK compatibility
 aiohttp==3.9.3
 
 # Utilities

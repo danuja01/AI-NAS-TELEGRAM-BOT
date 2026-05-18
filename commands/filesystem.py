@@ -93,11 +93,17 @@ async def ls_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /ls <path> [--all] command - List directory contents with numbered files."""
     user_id = update.effective_user.id
     
-    # Check for --all flag
+    # Check for --all flag (handle both -- and em-dash — from Telegram)
     apply_filter = True
     args = list(context.args) if context.args else []
     if '--all' in args:
         args.remove('--all')
+        apply_filter = False
+    elif '—all' in args:  # Telegram converts -- to em-dash
+        args.remove('—all')
+        apply_filter = False
+    elif '-all' in args:  # Single dash variant
+        args.remove('-all')
         apply_filter = False
     
     # Handle path resolution

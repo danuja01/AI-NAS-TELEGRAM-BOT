@@ -275,7 +275,8 @@ async def cd_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if current_dir:
             await update.message.reply_text(
                 f"📂 **Current Working Directory:**\n`{current_dir}`\n\n"
-                f"Use `/cd <path>` to change directory.",
+                f"💡 Use `/cd <path>` to change directory\n"
+                f"💡 Use `/cd root` for disk root",
                 parse_mode='Markdown'
             )
         else:
@@ -284,12 +285,26 @@ async def cd_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"📂 **No Working Directory Set**\n\n"
                 f"Default path: `{default_path}`\n\n"
-                f"Use `/cd <path>` to set a working directory.",
+                f"**Usage:**\n"
+                f"• `/cd <path>` - Change to specific path\n"
+                f"• `/cd root` - Change to disk root\n"
+                f"• `/cd` - Show current directory",
                 parse_mode='Markdown'
             )
         return
     
     target_path = ' '.join(context.args)
+    
+    # Handle special shortcuts
+    import config
+    if target_path.lower() == 'root':
+        if hasattr(config, 'DISK_ROOT_PATH'):
+            target_path = config.DISK_ROOT_PATH
+        else:
+            await update.message.reply_text(
+                format_error("DISK_ROOT_PATH not configured in settings")
+            )
+            return
     
     try:
         # Validate the path exists and is a directory
@@ -308,20 +323,23 @@ async def cd_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # Validate path is within allowed disk root
+        # Validate path is within allowed disk root (if configured)
         import config
-        if hasattr(config, 'DISK_ROOT_PATH'):
-            disk_root = Path(config.DISK_ROOT_PATH).resolve()
-            try:
-                path.relative_to(disk_root)
-            except ValueError:
-                await update.message.reply_text(
-                    format_error(
-                        f"❌ **Invalid Path**\n\n"
-                        f"Path must be within: `{config.DISK_ROOT_PATH}`"
+        if hasattr(config, 'DISK_ROOT_PATH') and config.DISK_ROOT_PATH:
+            # Only validate if the disk root path actually exists
+            disk_root_path = Path(config.DISK_ROOT_PATH)
+            if disk_root_path.exists():
+                disk_root = disk_root_path.resolve()
+                try:
+                    path.relative_to(disk_root)
+                except ValueError:
+                    await update.message.reply_text(
+                        format_error(
+                            f"❌ **Invalid Path**\n\n"
+                            f"Path must be within: `{config.DISK_ROOT_PATH}`"
+                        )
                     )
-                )
-                return
+                    return
         
         # Set working directory
         if RootSessionManager.set_working_directory(user_id, str(path)):
