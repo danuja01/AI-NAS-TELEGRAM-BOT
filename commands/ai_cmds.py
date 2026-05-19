@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes
 
 from utils.security import require_auth, rate_limit
 from utils.formatters import format_error, format_success, format_ai_response
-from utils.telegram_reply import reply_text_chunked
+from utils.telegram_reply import reply_text_chunked, delete_message_safe
 from ai.rag_engine import ask, index_documents, is_rag_ready, get_index_stats
 import config
 from ai.bot_command_catalog import BOT_COMMAND_CATALOG
@@ -74,6 +74,7 @@ async def cancel_pending_command(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def execute_ask(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, question: str):
+    status_msg = None
     try:
         if not is_rag_ready():
             await update.message.reply_text(
@@ -83,7 +84,7 @@ async def execute_ask(update: Update, context: ContextTypes.DEFAULT_TYPE, user_i
             )
             return
 
-        await update.message.reply_text("🤔 Searching documents and thinking...")
+        status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
 
         answer = await ask(question, user_id, use_thinking=False, search_web=False)
 
@@ -97,11 +98,21 @@ async def execute_ask(update: Update, context: ContextTypes.DEFAULT_TYPE, user_i
     except Exception as e:
         logger.error("Error in execute_ask: %s", e, exc_info=True)
         await update.message.reply_text(format_error(f"Failed to answer question: {e}"))
+    finally:
+        await delete_message_safe(status_msg)
 
 
-async def execute_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, message: str):
+async def execute_chat(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_id: int,
+    message: str,
+    *,
+    implicit: bool = False,
+):
+    status_msg = None
     try:
-        await update.message.reply_text("💬 Thinking (may query Docker/host)...")
+        status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
 
         conv_context = await ConversationManager.format_for_rag(user_id, limit=5)
         full_ctx_parts = [f"## Bot command reference\n{BOT_COMMAND_CATALOG}"]
@@ -133,16 +144,20 @@ async def execute_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
 
         await ConversationManager.add_message(user_id, "user", message)
         await ConversationManager.add_message(user_id, "assistant", response)
-        await save_command(user_id, f"/chat {message[:50]}", "Chat")
+        label = "Chat (plain message)" if implicit else "Chat"
+        await save_command(user_id, f"/chat {message[:50]}", label)
 
     except Exception as e:
         logger.error("Error in execute_chat: %s", e, exc_info=True)
         await update.message.reply_text(format_error(f"Chat failed: {e}"))
+    finally:
+        await delete_message_safe(status_msg)
 
 
 async def execute_summarize(
     update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, topic: str
 ):
+    status_msg = None
     try:
         if not is_rag_ready():
             await update.message.reply_text(
@@ -151,7 +166,7 @@ async def execute_summarize(
             )
             return
 
-        await update.message.reply_text("📝 Gathering information and summarizing...")
+        status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
 
         answer = await ask(
             f"Provide a comprehensive summary of information about: {topic}",
@@ -171,9 +186,12 @@ async def execute_summarize(
     except Exception as e:
         logger.error("Error in execute_summarize: %s", e, exc_info=True)
         await update.message.reply_text(format_error(f"Summarization failed: {e}"))
+    finally:
+        await delete_message_safe(status_msg)
 
 
 async def execute_explain(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, term: str):
+    status_msg = None
     try:
         if not is_rag_ready():
             await update.message.reply_text(
@@ -182,7 +200,7 @@ async def execute_explain(update: Update, context: ContextTypes.DEFAULT_TYPE, us
             )
             return
 
-        await update.message.reply_text(f"📚 Looking up '{term}'...")
+        status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
 
         answer = await ask(f"Explain what '{term}' means", user_id)
 
@@ -198,11 +216,21 @@ async def execute_explain(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     except Exception as e:
         logger.error("Error in execute_explain: %s", e, exc_info=True)
         await update.message.reply_text(format_error(f"Explanation failed: {e}"))
+    finally:
+        await delete_message_safe(status_msg)
 
 
-async def execute_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, text: str):
+async def execute_analyze(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_id: int,
+    text: str,
+    *,
+    implicit: bool = False,
+):
+    status_msg = None
     try:
-        await update.message.reply_text("🧠 Analyzing (may query Docker/host)...")
+        status_msg = await update.message.reply_text("🧠 Analyzing (may query Docker/host)...")
 
         conv_context = await ConversationManager.format_for_rag(user_id, limit=5)
         full_ctx_parts = [f"## Bot command reference\n{BOT_COMMAND_CATALOG}"]
@@ -253,16 +281,20 @@ async def execute_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE, us
 
         await ConversationManager.add_message(user_id, "user", f"/analyze {text}")
         await ConversationManager.add_message(user_id, "assistant", analysis)
-        await save_command(user_id, "/analyze", "Analysis")
+        label = "Analysis (plain message)" if implicit else "Analysis"
+        await save_command(user_id, "/analyze", label)
 
     except Exception as e:
         logger.error("Error in execute_analyze: %s", e, exc_info=True)
         await update.message.reply_text(format_error(f"Analysis failed: {e}"))
+    finally:
+        await delete_message_safe(status_msg)
 
 
 async def execute_think(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, question: str):
+    status_msg = None
     try:
-        await update.message.reply_text("🤔 Deep thinking with o3 (this may take longer)...")
+        status_msg = await update.message.reply_text("🤔 Deep thinking (this may take longer)...")
 
         conv_context = await ConversationManager.format_for_rag(user_id, limit=5)
 
@@ -278,9 +310,12 @@ async def execute_think(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     except Exception as e:
         logger.error("Error in execute_think: %s", e, exc_info=True)
         await update.message.reply_text(format_error(f"Thinking failed: {e}"))
+    finally:
+        await delete_message_safe(status_msg)
 
 
 async def execute_websearch(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, query: str):
+    status_msg = None
     try:
         if not await is_search_available():
             await update.message.reply_text(
@@ -290,7 +325,7 @@ async def execute_websearch(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             )
             return
 
-        await update.message.reply_text(f"🔍 Searching the web for '{query}'...")
+        status_msg = await update.message.reply_text(f"🔍 Searching the web for '{query}'...")
 
         results = await search_web(query, num_results=5)
 
@@ -323,6 +358,8 @@ async def execute_websearch(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     except Exception as e:
         logger.error("Error in execute_websearch: %s", e, exc_info=True)
         await update.message.reply_text(format_error(f"Search failed: {e}"))
+    finally:
+        await delete_message_safe(status_msg)
 
 
 @require_auth

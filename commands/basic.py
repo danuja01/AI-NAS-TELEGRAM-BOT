@@ -63,7 +63,7 @@ HELP_SECTION_BODIES: dict[str, str] = {
     "ai": (
         "<b>AI</b>\n\n"
         "<code>/ask</code> — Ask your indexed documents (RAG)\n"
-        "<code>/chat</code> — Free-form chat with the model\n"
+        "<code>/chat</code> — Free-form chat with the model (in a **private** chat, a normal message without `/` uses the same flow)\n"
         "<code>/summarize</code> — Summarize a topic from documents\n"
         "<code>/explain</code> — Explain a term from documents\n"
         "<code>/analyze</code> — Deeper analysis of pasted or follow-up text\n"
