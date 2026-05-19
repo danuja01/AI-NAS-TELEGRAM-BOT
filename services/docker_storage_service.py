@@ -9,10 +9,229 @@ import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+import shutil
 
 from utils.shell_exec import ShellResult, run_sync
 
 logger = logging.getLogger(__name__)
+
+
+def _human_size(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024:
+            return f"{n:.1f}{unit}" if unit != "B" else f"{n}B"
+        n /= 1024
+    return f"{n:.1f}PB"
+
+
+def _sdk_client():  # lazily typed
+    import docker
+
+    return docker.from_env()
+
+
+def _human_space_bytes(space: Any) -> str:
+    try:
+        n = int(space or 0)
+    except (TypeError, ValueError):
+        return "0B"
+    if n <= 0:
+        return "0B"
+    return _human_size(n)
+
+
+def _docker_cli_available() -> bool:
+    return shutil.which("docker") is not None
+
+
+def _shell_result_from_sdk(
+    argv_label: List[str],
+    *,
+    stdout: str,
+    stderr: str = "",
+    exit_code: int = 0,
+    error: Optional[str] = None,
+) -> ShellResult:
+    return ShellResult(
+        argv=list(argv_label),
+        exit_code=exit_code,
+        stdout=stdout[:12000],
+        stderr=stderr[:4000],
+        error=error,
+    )
+
+
+def _prune_containers_sdk() -> ShellResult:
+    try:
+        cli = _sdk_client()
+        resp = cli.containers.prune()
+        deleted = resp.get("ContainersDeleted") or []
+        space = resp.get("SpaceReclaimed") or 0
+        out = (
+            f"Deleted {len(deleted)} container(s).\n"
+            f"Total reclaimed space: {_human_space_bytes(space)}\n"
+        )
+        return _shell_result_from_sdk(["sdk", "container", "prune"], stdout=out)
+    except Exception as exc:
+        logger.exception("containers.prune sdk")
+        return _shell_result_from_sdk(
+            ["sdk", "container", "prune"],
+            stdout="",
+            stderr=str(exc),
+            exit_code=-1,
+            error=str(exc),
+        )
+
+
+def _prune_images_sdk(dangling_only: bool) -> ShellResult:
+    try:
+        cli = _sdk_client()
+        if dangling_only:
+            filters: Dict[str, Any] = {"dangling": True}
+            label = "dangling images"
+        else:
+            filters = {"dangling": False}
+            label = "unused images (-a semantics)"
+        try:
+            resp = cli.images.prune(filters=filters)
+        except Exception as inner:
+            if not dangling_only:
+                logger.warning(
+                    "image prune all-unused failed (%s); retrying dangling-only", inner
+                )
+                return _prune_images_sdk(True)
+            raise inner
+        deleted = resp.get("ImagesDeleted") or []
+        space = resp.get("SpaceReclaimed") or 0
+        out = (
+            f"Deleted {len(deleted)} image(s) ({label}).\n"
+            f"Total reclaimed space: {_human_space_bytes(space)}\n"
+        )
+        return _shell_result_from_sdk(
+            ["sdk", "image", "prune", "dangling" if dangling_only else "all-unused"],
+            stdout=out,
+        )
+    except Exception as exc:
+        logger.exception("images.prune sdk")
+        return _shell_result_from_sdk(
+            ["sdk", "image", "prune"],
+            stdout="",
+            stderr=str(exc),
+            exit_code=-1,
+            error=str(exc),
+        )
+
+
+def _prune_builder_sdk() -> ShellResult:
+    try:
+        cli = _sdk_client()
+        api = cli.api
+        if not getattr(api, "prune_builds", None):
+            return _shell_result_from_sdk(
+                ["sdk", "builder", "prune"],
+                stdout="",
+                stderr="Build cache prune not supported by this Engine API.",
+                exit_code=-1,
+                error="prune_builds unavailable",
+            )
+        resp = api.prune_builds(filters=None) or {}
+        deleted = resp.get("CachesDeleted") or resp.get("SpaceReclaimed")
+        reclaimed = resp.get("SpaceReclaimed", 0)
+        if isinstance(deleted, list):
+            cnt = len(deleted)
+            out = (
+                f"Deleted {cnt} build cache record(s).\n"
+                f"Total reclaimed space: {_human_space_bytes(reclaimed)}\n"
+            )
+        else:
+            out = f"Build cache prune done.\nTotal reclaimed space: {_human_space_bytes(reclaimed)}\n"
+        return _shell_result_from_sdk(["sdk", "builder", "prune"], stdout=out)
+    except Exception as exc:
+        logger.exception("builder prune sdk")
+        return _shell_result_from_sdk(
+            ["sdk", "builder", "prune"],
+            stdout="",
+            stderr=str(exc),
+            exit_code=-1,
+            error=str(exc),
+        )
+
+
+def _prune_networks_sdk() -> ShellResult:
+    try:
+        cli = _sdk_client()
+        resp = cli.networks.prune()
+        nets = resp.get("NetworksDeleted") or []
+        space = resp.get("SpaceReclaimed") or 0
+        out = (
+            f"Deleted {len(nets)} unused network(s).\n"
+            f"Total reclaimed space: {_human_space_bytes(space)}\n"
+        )
+        return _shell_result_from_sdk(["sdk", "network", "prune"], stdout=out)
+    except Exception as exc:
+        logger.exception("network prune sdk")
+        return _shell_result_from_sdk(
+            ["sdk", "network", "prune"],
+            stdout="",
+            stderr=str(exc),
+            exit_code=-1,
+            error=str(exc),
+        )
+
+
+def _docker_df_sdk(verbose: bool = False) -> ShellResult:
+    """Approximate docker system df using Engine DiskUsage."""
+    try:
+        cli = _sdk_client()
+        d = cli.df()
+        lines: List[str] = ["Docker disk usage (API)", ""]
+        if d.get("LayersSize") is not None:
+            lines.append(f"  Layers total: {_human_space_bytes(d['LayersSize'])}")
+        images = d.get("Images") or []
+        containers = d.get("Containers") or []
+        vols = d.get("Volumes") or []
+        bcache = d.get("BuildCache") or []
+
+        tb_size = lambda rows, key='Size': sum(int(x.get(key) or 0) for x in rows if isinstance(x, dict))
+
+        if images:
+            active = sum(1 for img in images if isinstance(img, dict) and int(img.get("Containers") or 0) > 0)
+            size_sum = tb_size(images, "Size")
+            lines.append(
+                f"  Images:       {len(images)} total · {active} in use · size ~{_human_space_bytes(size_sum)}"
+            )
+        if containers:
+            running = sum(1 for x in containers if isinstance(x, dict) and x.get("State") == "running")
+            lines.append(
+                f"  Containers:   {len(containers)} total · ~{running} running · "
+                f"writable layer ~{_human_space_bytes(tb_size(containers, 'SizeRw'))}"
+            )
+        if vols:
+            lines.append(f"  Volumes:      {len(vols)} local volume(s)")
+        if bcache:
+            bc_bytes = tb_size(bcache)
+            lines.append(f"  Build cache:  {len(bcache)} entr(y/ies), size ~{_human_space_bytes(bc_bytes)}")
+        if verbose and images[:5]:
+            lines.append("")
+            lines.append("(verbose sample — repo tags)")
+            for img in images[:5]:
+                if not isinstance(img, dict):
+                    continue
+                tid = (str(img.get("Id") or "?"))[:13]
+                tags = ",".join((img.get("RepoTags") or [])[:3]) or "(none)"
+                lines.append(f"    {tid} … {tags}")
+        text = "\n".join(lines) + "\n"
+        return _shell_result_from_sdk(["sdk", "df"], stdout=text)
+    except Exception as exc:
+        logger.warning("docker df sdk: %s", exc)
+        return _shell_result_from_sdk(
+            ["sdk", "df"],
+            stdout="",
+            stderr=str(exc),
+            exit_code=-1,
+            error=str(exc),
+        )
+
 
 
 def _container_row_running(row: Dict[str, Any]) -> bool:
@@ -110,7 +329,19 @@ def _parse_reclaimable(text: str) -> str:
 
 
 def docker_system_df(verbose: bool = False) -> ShellResult:
-    return run_sync(DOCKER_DF_V if verbose else DOCKER_DF)
+    r_cli: Optional[ShellResult] = None
+    if _docker_cli_available():
+        r_cli = run_sync(DOCKER_DF_V if verbose else DOCKER_DF)
+        if r_cli.ok and (r_cli.stdout or "").strip():
+            return r_cli
+        if r_cli.error:
+            logger.debug("docker_system_df CLI failed (%s); trying SDK", r_cli.error)
+    sdk = _docker_df_sdk(verbose)
+    if sdk.ok or (sdk.stdout or "").strip():
+        return sdk
+    if r_cli is not None:
+        return r_cli
+    return sdk
 
 
 def docker_ps_json_lines() -> List[Dict[str, Any]]:
@@ -153,22 +384,41 @@ def docker_builder_du() -> ShellResult:
 
 
 def estimate_safe_prune(dry_run_all: bool = False) -> PruneEstimate:
-    """Dry-run prune commands (no -f) to estimate reclaimable space."""
+    """Dry-run prune via CLI when available; otherwise approximate from SDK data."""
     est = PruneEstimate()
-    for label, argv in [
-        ("container", PRUNE_CONTAINER_DRY),
-        ("image", PRUNE_IMAGE_ALL_DRY if dry_run_all else PRUNE_IMAGE_DRY),
-        ("builder", PRUNE_BUILDER_DRY),
-    ]:
-        r = run_sync(argv)
-        est.raw_outputs.append(f"--- {label} ---\n{r.stdout}\n{r.stderr}")
-        val = _parse_reclaimable(r.stdout + r.stderr)
-        if label == "container":
-            est.container_reclaim = val
-        elif label == "image":
-            est.image_reclaim = val
-        else:
-            est.builder_reclaim = val
+    if _docker_cli_available():
+        for label, argv in [
+            ("container", PRUNE_CONTAINER_DRY),
+            ("image", PRUNE_IMAGE_ALL_DRY if dry_run_all else PRUNE_IMAGE_DRY),
+            ("builder", PRUNE_BUILDER_DRY),
+        ]:
+            r = run_sync(argv)
+            est.raw_outputs.append(f"--- {label} ---\n{r.stdout}\n{r.stderr}")
+            val = _parse_reclaimable(r.stdout + r.stderr)
+            if label == "container":
+                est.container_reclaim = val
+            elif label == "image":
+                est.image_reclaim = val
+            else:
+                est.builder_reclaim = val
+        return est
+
+    imgs = list_images_with_usage()
+    dang = sum(int(i.get("size_bytes") or 0) for i in imgs if i.get("dangling"))
+    uns = sum(int(i.get("size_bytes") or 0) for i in imgs if i.get("unused"))
+    est.image_reclaim = _human_size(dang + (uns if dry_run_all else 0))
+    stopped = sum(1 for c in docker_ps_json_lines() if not _container_row_running(c))
+    est.container_reclaim = f"{stopped} stopped (size varies)"
+    try:
+        d = _sdk_client().df()
+        bc = d.get("BuildCache") or []
+        bc_bytes = sum(int(x.get("Size") or 0) for x in bc if isinstance(x, dict))
+        est.builder_reclaim = _human_size(bc_bytes) if bc_bytes else "0B"
+    except Exception:
+        est.builder_reclaim = "n/a"
+    est.raw_outputs.append(
+        "--- note ---\nNo docker CLI in container; rough estimate from images + build cache API."
+    )
     return est
 
 
@@ -176,28 +426,45 @@ def run_safe_prune(use_all_images: bool = False) -> PruneResult:
     """Prune stopped containers, unused images, build cache. Never volumes."""
     result = PruneResult()
     result.before_df = docker_system_df().stdout
-    steps = [
-        ("container prune", PRUNE_CONTAINER_F),
-        ("image prune", PRUNE_IMAGE_ALL_F if use_all_images else PRUNE_IMAGE_F),
-        ("builder prune", PRUNE_BUILDER_F),
-    ]
-    for name, argv in steps:
-        r = run_sync(argv)
-        result.steps.append((name, r))
-        logger.info(
-            "safe_prune %s exit=%s reclaim=%s",
-            name,
-            r.exit_code,
-            _parse_reclaimable(r.stdout + r.stderr),
+    if _docker_cli_available():
+        steps_cli: List[Tuple[str, List[str]]] = [
+            ("container prune", PRUNE_CONTAINER_F),
+            ("image prune", PRUNE_IMAGE_ALL_F if use_all_images else PRUNE_IMAGE_F),
+            ("builder prune", PRUNE_BUILDER_F),
+        ]
+        for name, argv in steps_cli:
+            r = run_sync(argv)
+            result.steps.append((name, r))
+            logger.info(
+                "safe_prune %s exit=%s reclaim=%s",
+                name,
+                r.exit_code,
+                _parse_reclaimable(r.stdout + r.stderr),
+            )
+    else:
+        result.steps.append(("container prune", _prune_containers_sdk()))
+        result.steps.append(
+            ("image prune", _prune_images_sdk(dangling_only=not use_all_images))
         )
+        result.steps.append(("builder prune", _prune_builder_sdk()))
+        for name, r in result.steps:
+            logger.info(
+                "safe_prune %s exit=%s reclaim=%s",
+                name,
+                r.exit_code,
+                _parse_reclaimable(r.stdout + r.stderr),
+            )
     result.after_df = docker_system_df().stdout
     return result
 
 
 def run_aggressive_extras() -> List[Tuple[str, ShellResult]]:
     """Network prune + apt clean on host (via host_runner in caller)."""
-    steps = []
-    r = run_sync(PRUNE_NETWORK_F)
+    steps: List[Tuple[str, ShellResult]] = []
+    if _docker_cli_available():
+        r = run_sync(PRUNE_NETWORK_F)
+    else:
+        r = _prune_networks_sdk()
     steps.append(("network prune", r))
     logger.info("aggressive network prune exit=%s", r.exit_code)
     return steps
@@ -259,12 +526,16 @@ def run_quick_prune() -> PruneResult:
     """dprune: dangling images + builder cache only."""
     result = PruneResult()
     result.before_df = docker_system_df().stdout
-    for name, argv in [
-        ("image prune (dangling)", PRUNE_IMAGE_F),
-        ("builder prune", PRUNE_BUILDER_F),
-    ]:
-        r = run_sync(argv)
-        result.steps.append((name, r))
+    if _docker_cli_available():
+        for name, argv in [
+            ("image prune (dangling)", PRUNE_IMAGE_F),
+            ("builder prune", PRUNE_BUILDER_F),
+        ]:
+            r = run_sync(argv)
+            result.steps.append((name, r))
+    else:
+        result.steps.append(("image prune (dangling)", _prune_images_sdk(True)))
+        result.steps.append(("builder prune", _prune_builder_sdk()))
     result.after_df = docker_system_df().stdout
     return result
 
@@ -277,11 +548,3 @@ def count_containers() -> Tuple[int, int]:
         else:
             stopped += 1
     return running, stopped
-
-
-def _human_size(n: int) -> str:
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if n < 1024:
-            return f"{n:.1f}{unit}" if unit != "B" else f"{n}B"
-        n /= 1024
-    return f"{n:.1f}PB"
