@@ -154,6 +154,12 @@ MONITOR_SYSTEMD_UNITS = [
     if u.strip()
 ]
 
+# When false (default): journal_tail + systemctl_is_active only accept MONITOR_SYSTEMD_UNITS entries.
+# When true: accept any systemd unit string that passes strict syntax checks (still read-only profiles only;
+# argv list invocation — no shell). Lets you tail ssh/sshd/nginx without listing every unit in MONITOR.
+# Logs may contain secrets; only enable when you trust bot users + AI tooling.
+HOST_READONLY_SYSTEMD_ANY_UNIT = _env_bool("HOST_READONLY_SYSTEMD_ANY_UNIT", False)
+
 JOURNAL_TAIL_LINES = int(os.getenv("JOURNAL_TAIL_LINES", "20"))
 JOURNAL_ALERT_COOLDOWN_SECONDS = int(os.getenv("JOURNAL_ALERT_COOLDOWN_SECONDS", "600"))
 

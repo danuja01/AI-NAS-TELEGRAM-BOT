@@ -23,6 +23,10 @@ from services.omv_rpc_specs import OMV_RPC_CALLS
 logger = logging.getLogger(__name__)
 
 _UNIT_RE = re.compile(r"^[a-zA-Z0-9_.@-]+$")
+
+# systemd unit/instance names journalctl accepts (subset of systemd rules; excludes shell/meta chars).
+# Matches e.g. ssh, ssh.service, sshd.service, getty@tty1.service — see systemd.unit(5).
+_GENERIC_SYSTEMD_UNIT_RE = re.compile(r"^[a-zA-Z0-9:@_.\-\\]{1,240}$")
 _OMV_RPC_USER_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,31}$")
 # Allowlisted absolute paths for storage scans (must match config.STORAGE_SCAN_PATHS prefix)
 _SCAN_PATH_RE = re.compile(r"^/[a-zA-Z0-9_./-]+$")
@@ -47,7 +51,27 @@ def _truncate(s: str, limit: int = 12000) -> str:
     return s[: limit - 40] + "\n\n… (truncated) …\n"
 
 
-def _validate_unit(unit: str) -> bool:
+def _generic_systemd_unit_syntax_ok(unit: str) -> bool:
+    """True if ``unit`` looks like a safe systemd identifier (subset of systemd.unit(5) rules)."""
+    if not unit or len(unit) > 240:
+        return False
+    if "/" in unit or "`" in unit or "\x00" in unit or any(c in unit for c in " \t\n\r\f\v|;&$()"):
+        return False
+    first = unit[0]
+    if not (first.isalnum() or first in ("_", ":")):
+        return False
+    return bool(_GENERIC_SYSTEMD_UNIT_RE.match(unit))
+
+
+def _validate_journal_or_systemctl_unit(unit: str) -> bool:
+    """
+    systemctl_is_active + journal_tail: either MONITOR_SYSTEMD_UNITS entries only,
+    or (when HOST_READONLY_SYSTEMD_ANY_UNIT) any syntactically valid unit name.
+    """
+    if not _generic_systemd_unit_syntax_ok(unit):
+        return False
+    if config.HOST_READONLY_SYSTEMD_ANY_UNIT:
+        return True
     if not unit or not _UNIT_RE.match(unit):
         return False
     return unit in config.MONITOR_SYSTEMD_UNITS
@@ -130,16 +154,20 @@ def run_profile(
         raw_to = config.HOST_OMV_UPGRADE_TIMEOUT
         to = None if raw_to <= 0 else raw_to
     elif profile == "systemctl_is_active":
-        if len(extra_args) != 1 or not _validate_unit(extra_args[0]):
-            return HostExecResult(
-                profile, -1, "", "", error="Invalid or disallowed systemd unit"
+        if len(extra_args) != 1 or not _validate_journal_or_systemctl_unit(extra_args[0]):
+            hint = (
+                "Invalid systemd unit, or unit not in MONITOR_SYSTEMD_UNITS. "
+                "Set HOST_READONLY_SYSTEMD_ANY_UNIT=true to query any syntactically valid unit (read-only)."
             )
+            return HostExecResult(profile, -1, "", "", error=hint)
         inner = ["systemctl", "is-active", extra_args[0]]
     elif profile == "journal_tail":
-        if len(extra_args) != 1 or not _validate_unit(extra_args[0]):
-            return HostExecResult(
-                profile, -1, "", "", error="Invalid or disallowed systemd unit"
+        if len(extra_args) != 1 or not _validate_journal_or_systemctl_unit(extra_args[0]):
+            hint = (
+                "Invalid systemd unit, or unit not in MONITOR_SYSTEMD_UNITS. "
+                "Set HOST_READONLY_SYSTEMD_ANY_UNIT=true to tail any syntactically valid unit (read-only)."
             )
+            return HostExecResult(profile, -1, "", "", error=hint)
         n = str(min(50, max(5, config.JOURNAL_TAIL_LINES)))
         inner = ["journalctl", "-u", extra_args[0], "-n", n, "--no-pager"]
     elif profile == "du_path":

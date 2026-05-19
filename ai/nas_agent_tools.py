@@ -87,7 +87,9 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
     (
         "Read-only host diagnostics on the OMV/NAS machine via SSH or nsenter (same pipeline as HOST_EXEC_MODE). "
         "**Not** arbitrary shell — only fixed allowlisted profiles (apt list --upgradable, reboot-required banner, "
-        "systemctl is-active/journalctl tail for monitored units, systemctl --failed, du/find under STORAGE_SCAN_PATHS). "
+        "systemctl is-active/journalctl tail for allowed systemd units, systemctl --failed, du/find under STORAGE_SCAN_PATHS). "
+        "Units default to MONITOR_SYSTEMD_UNITS; set HOST_READONLY_SYSTEMD_ANY_UNIT=true to allow SSH journal checks (ssh/sshd) "
+        "and other valid unit names — still read-only, no installs/upgrades/filesystem writes via this tool."
         "Requires AGENT_HOST_READONLY_TOOL=true at boot. Does **not** replace `/ssh` (root-session shell)."
     ),
     {
@@ -98,7 +100,12 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
         },
         "unit": {
             "type": "string",
-            "description": "systemd unit from bot MONITOR_SYSTEMD_UNITS; required for systemctl_is_active and journal_tail.",
+            "description": (
+                "systemd unit (e.g. ssh.service, sshd.service, nginx.service). Required for "
+                "systemctl_is_active and journal_tail. "
+                "If HOST_READONLY_SYSTEMD_ANY_UNIT=true, any safe unit syntax is accepted (logs may expose secrets); "
+                "otherwise the unit must be listed in MONITOR_SYSTEMD_UNITS."
+            ),
         },
         "path": {
             "type": "string",

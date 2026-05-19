@@ -54,7 +54,8 @@ For OpenMediaVault / Debian **host** actions from the bot, the container should 
 | `HOST_EXEC_MODE` | `nsenter` (default), `ssh`, or `none` |
 | `HOST_SSH` | e.g. `admin@192.168.1.5` when using SSH mode |
 | `MAINTENANCE_ALLOWED_USER_IDS` | Who may run `/upgrade` (comma-separated); if empty, same as `ALLOWED_USER_IDS` |
-| `MONITOR_SYSTEMD_UNITS` | Units for health + `journalctl` tails (e.g. `docker,smbd,nginx`) |
+| `MONITOR_SYSTEMD_UNITS` | Units for health checks + alerts (e.g. `docker,smbd,nginx`) |
+| `HOST_READONLY_SYSTEMD_ANY_UNIT` | `false` (default): `journal_tail` / `systemctl_is_active` only for units in `MONITOR_SYSTEMD_UNITS`. Set `true` to allow **read-only** journal/status for any syntactically valid unit (SSH `ssh`/`sshd`, etc.). Still no shell writes; journals may expose secrets. |
 | `CRON_NOTIFY_SECRET` | If set, starts an HTTP hook inside the container on `CRON_NOTIFY_BIND:CRON_NOTIFY_PORT` |
 | `HEALTH_CHECK_INTERVAL`, `METRICS_SAMPLE_INTERVAL_MINUTES`, `DIGEST_INTERVAL_HOURS` | Monitoring scheduler |
 | `OMV_RPC_USER` | User passed to `omv-rpc -u` (default `admin`) |
