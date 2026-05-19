@@ -15,6 +15,9 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+# Import-only check: no real tokens required (config.validate_config is skipped).
+os.environ.setdefault("SMOKE_IMPORT_ONLY", "1")
+
 
 def main() -> int:
     try:

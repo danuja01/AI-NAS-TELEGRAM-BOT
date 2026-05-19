@@ -194,5 +194,6 @@ def validate_config():
     if errors:
         raise ValueError(f"Configuration errors: {', '.join(errors)}")
 
-# Validate on import
-validate_config()
+# Validate on import (skipped for CI/local import-only smoke tests)
+if os.getenv("SMOKE_IMPORT_ONLY", "").strip().lower() not in ("1", "true", "yes"):
+    validate_config()

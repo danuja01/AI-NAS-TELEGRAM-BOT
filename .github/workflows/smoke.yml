@@ -27,8 +27,11 @@ jobs:
             --tag nas-telegram-bot:${{ github.event_name }}-${{ github.sha }}
 
       - name: Smoke test — verify application imports
+        env:
+          SMOKE_IMPORT_ONLY: "1"
         run: |
           docker run --rm \
+            -e SMOKE_IMPORT_ONLY=1 \
             --entrypoint python \
             nas-telegram-bot:${{ github.event_name }}-${{ github.sha }} \
             scripts/smoke_imports.py
