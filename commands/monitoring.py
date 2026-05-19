@@ -16,14 +16,21 @@ from utils.formatters import (
     format_system_stats,
     format_cpu_stats,
     format_memory_stats,
-    format_disk_stats,
+    format_disks_with_omv,
     format_temperature_stats,
     format_network_stats,
     format_health_score,
-    format_smart_data,
-    format_hdd_detail,
+    format_smart_with_omv,
+    format_hdd_detail_with_omv,
     format_uptime,
     format_error_html,
+    format_omv_filesystems_panel,
+)
+from services.omv_client import (
+    fetch_disk_enumerate,
+    fetch_filesystems_mounted,
+    fetch_smart_devices,
+    omv_rpc_available,
 )
 from services.system_monitor import (
     get_comprehensive_status,
@@ -63,6 +70,12 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         message = format_system_stats(stats)
+        if omv_rpc_available():
+            fs_rows, e_omv = await fetch_filesystems_mounted()
+            if fs_rows and not e_omv:
+                message += "\n\n" + format_omv_filesystems_panel(fs_rows, max_rows=8)
+            elif e_omv:
+                message += f"\n\n<i>OMV: {escape_telegram_html(e_omv)}</i>"
         await reply_text_safe(update, message, **_monitoring_kw())
 
         await save_conversation(user_id, "user", "/status")
@@ -138,7 +151,21 @@ async def disk_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         stats = get_disk_stats()
-        message = format_disk_stats(stats)
+        omv_fs: list = []
+        omv_disks: list = []
+        omv_note = None
+        if omv_rpc_available():
+            fs_rows, e1 = await fetch_filesystems_mounted()
+            dk_rows, e2 = await fetch_disk_enumerate()
+            if not e1:
+                omv_fs = fs_rows
+            if not e2:
+                omv_disks = dk_rows
+            if e1 and e2:
+                omv_note = f"OMV RPC: {e1}"
+            elif e1 or e2:
+                omv_note = " | ".join(x for x in (e1, e2) if x)
+        message = format_disks_with_omv(stats, omv_fs, omv_disks, omv_banner=omv_note)
         await reply_text_safe(update, message, **_monitoring_kw())
 
         await save_conversation(user_id, "user", "/disk")
@@ -277,7 +304,13 @@ async def smart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        message = format_smart_data(drives)
+        omv_smart: list = []
+        omv_note = None
+        if omv_rpc_available():
+            omv_smart, e_omv = await fetch_smart_devices()
+            if e_omv:
+                omv_note = e_omv
+        message = format_smart_with_omv(drives, omv_smart, omv_note)
 
         warnings = check_drive_warnings(drives)
         if warnings:
@@ -334,7 +367,14 @@ async def hdddetail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if dev:
                 history_by_device[dev] = await get_drive_spin_history(dev, limit=14)
 
-        message = format_hdd_detail(drives, history_by_device)
+        omv_disks: list = []
+        omv_note = None
+        if omv_rpc_available():
+            omv_disks, e_omv = await fetch_disk_enumerate()
+            if e_omv:
+                omv_note = e_omv
+
+        message = format_hdd_detail_with_omv(drives, history_by_device, omv_disks, omv_note)
         warnings = check_drive_warnings(drives)
         if warnings:
             wlines = "\n".join(escape_telegram_html(w) for w in warnings)

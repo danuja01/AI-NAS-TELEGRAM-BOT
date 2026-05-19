@@ -18,7 +18,16 @@ from ai.agent_telegram import AgentTelegramBindings
 from services import docker_service as ds
 from services.file_service import get_storage_summary
 from services.service_manager import list_common_services
-from services.smart_monitor import check_drive_warnings, get_all_drives
+from services.smart_monitor import check_drive_warnings, get_all_drives, get_smart_data
+from services.omv_client import (
+    omv_disk_summary_json,
+    omv_filesystems_summary_json,
+    omv_rpc_available,
+    omv_smart_summary_json,
+    sync_fetch_disk_enumerate,
+    sync_fetch_filesystems_mounted,
+    sync_fetch_smart_devices,
+)
 from services.system_monitor import (
     calculate_health_score,
     get_disk_stats,
@@ -31,6 +40,9 @@ from services.system_monitor import (
 logger = logging.getLogger(__name__)
 
 _CONTAINER_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,253}$")
+_SMART_DEVICE_RE = re.compile(
+    r"^(/dev/sd[a-z]+|/dev/nvme\d+n\d+(?:p\d+)?|/dev/disk/by-id/[\w./-]+)$"
+)
 
 _MAX_SERVICES = 45
 _MAX_SMART_DRIVES = 12
@@ -143,6 +155,39 @@ NAS_AGENT_TOOLS: List[Dict[str, Any]] = [
             "Quick live snapshot: CPU %, load average, memory %, swap, temperature sensors, sample disks, uptime. "
             "Use as a one-shot overview or after other focused tools if you still need CPU/load + temps together."
         ),
+    ),
+    _tool_entry(
+        "nas_omv_physical_disks",
+        (
+            "OpenMediaVault physical disk inventory via host `omv-rpc DiskMgmt enumerateDevices`: "
+            "model, serial, WWN, size, OMV-reported SMART temp and power mode. "
+            "Requires the bot to reach the OMV host (HOST_EXEC_MODE nsenter/ssh). Use for 'what disks does OMV see'."
+        ),
+    ),
+    _tool_entry(
+        "nas_omv_filesystems",
+        (
+            "OpenMediaVault mounted filesystems via `FileSystemMgmt enumerateMountedFilesystems`: "
+            "mountpoint, fstype, OMV usage percent, devicefile. Matches the Storage UI. "
+            "Complement with nas_disk_partitions for live psutil usage if needed."
+        ),
+    ),
+    _tool_entry(
+        "nas_omv_smart_devices",
+        (
+            "OpenMediaVault SMART-capable devices via `Smart enumerateDevices`: overall OMV SMART status, model, serial, temperature. "
+            "Different from nas_smart_drives (raw smartctl); use both when diagnosing mismatches."
+        ),
+    ),
+    _tool_entry(
+        "nas_smart_device_detail",
+        (
+            "Detailed SMART summary for ONE disk from smartctl JSON (model, health, temp, power-on hours, "
+            "reallocated/pending sectors, load/power cycle counts when available). "
+            "Pass devicefile like /dev/sda or /dev/nvme0n1."
+        ),
+        {"device": {"type": "string", "description": "Block device path, e.g. /dev/sda or /dev/nvme0n1"}},
+        required=["device"],
     ),
     _tool_entry(
         "nas_request_docker_restart",
@@ -336,6 +381,74 @@ def _smart_drives() -> str:
         return json.dumps({"ok": False, "error": str(e)})
 
 
+def _omv_physical_disks() -> str:
+    if not omv_rpc_available():
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "OMV RPC unavailable (HOST_EXEC_MODE=none, OMV_RPC_ENABLED=false, or host unreachable)",
+            }
+        )
+    try:
+        rows, err = sync_fetch_disk_enumerate()
+        if err:
+            return json.dumps({"ok": False, "error": err})
+        return omv_disk_summary_json(rows)
+    except Exception as e:
+        logger.exception("nas_omv_physical_disks")
+        return json.dumps({"ok": False, "error": str(e)})
+
+
+def _omv_filesystems() -> str:
+    if not omv_rpc_available():
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "OMV RPC unavailable (HOST_EXEC_MODE=none, OMV_RPC_ENABLED=false, or host unreachable)",
+            }
+        )
+    try:
+        rows, err = sync_fetch_filesystems_mounted()
+        if err:
+            return json.dumps({"ok": False, "error": err})
+        return omv_filesystems_summary_json(rows)
+    except Exception as e:
+        logger.exception("nas_omv_filesystems")
+        return json.dumps({"ok": False, "error": str(e)})
+
+
+def _omv_smart_devices() -> str:
+    if not omv_rpc_available():
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "OMV RPC unavailable (HOST_EXEC_MODE=none, OMV_RPC_ENABLED=false, or host unreachable)",
+            }
+        )
+    try:
+        rows, err = sync_fetch_smart_devices()
+        if err:
+            return json.dumps({"ok": False, "error": err})
+        return omv_smart_summary_json(rows)
+    except Exception as e:
+        logger.exception("nas_omv_smart_devices")
+        return json.dumps({"ok": False, "error": str(e)})
+
+
+def _smart_device_detail(args: Dict[str, Any]) -> str:
+    dev = str(args.get("device", "")).strip()
+    if not dev or len(dev) > 200 or not _SMART_DEVICE_RE.match(dev):
+        return json.dumps({"ok": False, "error": "Invalid device path (use /dev/sdX, /dev/nvme0n1, or /dev/disk/by-id/...)"})
+    try:
+        info = get_smart_data(dev)
+        if not info:
+            return json.dumps({"ok": False, "error": f"No SMART data for {dev}"})
+        return json.dumps({"ok": True, "device": dev, "smart": info}, default=str)
+    except Exception as e:
+        logger.exception("nas_smart_device_detail")
+        return json.dumps({"ok": False, "error": str(e)})
+
+
 def _systemd_services() -> str:
     try:
         services = list_common_services()[:_MAX_SERVICES]
@@ -421,6 +534,14 @@ def run_nas_tool(function_name: str, arguments: Dict[str, Any] | None) -> str:
             return _network_brief()
         if function_name == "nas_smart_drives":
             return _smart_drives()
+        if function_name == "nas_omv_physical_disks":
+            return _omv_physical_disks()
+        if function_name == "nas_omv_filesystems":
+            return _omv_filesystems()
+        if function_name == "nas_omv_smart_devices":
+            return _omv_smart_devices()
+        if function_name == "nas_smart_device_detail":
+            return _smart_device_detail(args)
         if function_name == "nas_systemd_services":
             return _systemd_services()
         if function_name == "nas_storage_allowed_paths":

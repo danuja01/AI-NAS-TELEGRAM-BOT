@@ -57,8 +57,12 @@ For OpenMediaVault / Debian **host** actions from the bot, the container should 
 | `MONITOR_SYSTEMD_UNITS` | Units for health + `journalctl` tails (e.g. `docker,smbd,nginx`) |
 | `CRON_NOTIFY_SECRET` | If set, starts an HTTP hook inside the container on `CRON_NOTIFY_BIND:CRON_NOTIFY_PORT` |
 | `HEALTH_CHECK_INTERVAL`, `METRICS_SAMPLE_INTERVAL_MINUTES`, `DIGEST_INTERVAL_HOURS` | Monitoring scheduler |
+| `OMV_RPC_USER` | User passed to `omv-rpc -u` (default `admin`) |
+| `OMV_RPC_ENABLED` | `true`/`false` — disable all OMV RPC reads from the bot |
 
 **Telegram commands:** `/updates` (apt refresh + upgradable list), `/omv_updates` (same + OMV note), `/upgrade` (confirm, then **`omv-upgrade`** on host; long-running).
+
+**Storage analytics:** `/disk`, `/status`, `/smart`, and `/hdddetail` call read-only `omv-rpc` on the NAS (same RPC as the OMV UI) when `HOST_EXEC_MODE` is not `none`, so Telegram output can show OMV filesystem usage bars and physical disk inventory alongside live `psutil` / `smartctl` data.
 
 **Cron on the NAS host — option A — script:** [`scripts/notify_telegram.sh`](scripts/notify_telegram.sh) calls the Telegram HTTP API (set `TELEGRAM_CHAT_ID` or rely on first `ALLOWED_USER_IDS` from `.env`):
 
@@ -79,7 +83,7 @@ docker exec nas-telegram-bot curl -sS -X POST http://127.0.0.1:18765/notify \
 ## Features
 
 ### System Monitoring
-- Real-time CPU, RAM, disk, temperature, and network stats
+- Real-time CPU, RAM, disk, temperature, and network stats; optional **OpenMediaVault** filesystem and disk panels via host `omv-rpc` when the bot runs with host access (`HOST_EXEC_MODE`)
 - SMART drive health (`/smart`, `/drives`)
 - System health scoring (`/health`)
 - Tailscale IP detection

@@ -11,16 +11,16 @@ You help users with this bot. Prefer exact command names below. Destructive acti
 Telegram confirmations; tell users to run the command themselves when a confirmation UI is required.
 
 ## Monitoring
-- `/status` — Full system overview (CPU, RAM, disk, temps, uptime)
+- `/status` — Full system overview (CPU, RAM, disk, temps, uptime); may append OpenMediaVault filesystem usage when RPC works
 - `/cpu` — CPU usage and load average
 - `/ram` — Memory and swap
-- `/disk` — Disk partitions and free space
+- `/disk` — Disk partitions (live) plus OMV filesystem and physical disk panels when `omv-rpc` is available on the host
 - `/temps` — Temperature sensors
 - `/network` — Network interfaces and traffic
 - `/uptime` — System uptime
 - `/health` — Health score and issues list
-- `/smart` or `/drives` — SMART drive summary
-- `/hdddetail` — HDD spin history and hdparm state
+- `/smart` or `/drives` — SMART drive summary (smartctl) plus OMV SMART device overview when available
+- `/hdddetail` — HDD spin history and hdparm state; OMV physical disk inventory header when RPC works
 
 ## Docker and storage
 - `/docker` — Dashboard: disk summary, image/container counts, table

@@ -18,9 +18,12 @@ from typing import List, Optional, Sequence, Tuple
 
 import config
 
+from services.omv_rpc_specs import OMV_RPC_CALLS
+
 logger = logging.getLogger(__name__)
 
 _UNIT_RE = re.compile(r"^[a-zA-Z0-9_.@-]+$")
+_OMV_RPC_USER_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,31}$")
 # Allowlisted absolute paths for storage scans (must match config.STORAGE_SCAN_PATHS prefix)
 _SCAN_PATH_RE = re.compile(r"^/[a-zA-Z0-9_./-]+$")
 
@@ -172,6 +175,24 @@ def run_profile(
     elif profile == "apt_clean":
         inner = ["apt-get", "clean", "-qq"]
         to = config.STORAGE_CMD_TIMEOUT
+    elif profile == "omv_rpc":
+        if not getattr(config, "OMV_RPC_ENABLED", True):
+            return HostExecResult(profile, -1, "", "", error="OMV RPC disabled (set OMV_RPC_ENABLED=true)")
+        if len(extra_args) != 1:
+            return HostExecResult(
+                profile, -1, "", "", error="omv_rpc requires exactly one call_key argument"
+            )
+        call_key = extra_args[0]
+        if call_key not in OMV_RPC_CALLS:
+            return HostExecResult(profile, -1, "", "", error="Unknown or disallowed OMV RPC call key")
+        user = getattr(config, "OMV_RPC_USER", "admin") or "admin"
+        if not _OMV_RPC_USER_RE.match(user):
+            return HostExecResult(profile, -1, "", "", error="Invalid OMV_RPC_USER")
+        service, method, params_json = OMV_RPC_CALLS[call_key]
+        inner = ["omv-rpc", "-u", user, service, method]
+        if params_json is not None:
+            inner.append(params_json)
+        to = min(config.HOST_EXEC_TIMEOUT_SHORT, 120)
     else:
         return HostExecResult(profile, -1, "", "", error=f"Unknown profile: {profile}")
 

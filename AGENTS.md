@@ -18,6 +18,8 @@ The bot requires two environment variables to start: `TELEGRAM_TOKEN` and `OPENA
 
 Set `HOST_EXEC_MODE=none` in `.env` to disable NAS host commands (nsenter/SSH) when running outside a real NAS environment.
 
+Read-only **OpenMediaVault** storage views use host `omv-rpc` when host exec is enabled (`OMV_RPC_USER`, `OMV_RPC_ENABLED` in `.env`).
+
 ### Dependencies
 
 - Python 3.12 with `python3.12-venv` and `python3.12-dev` (needed to build `chroma-hnswlib` C++ extension)
