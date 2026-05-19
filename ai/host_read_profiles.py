@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from typing import Final, FrozenSet, List
 
-HOST_READONLY_PROFILES_ORDERED: Final[List[str]] = [
+from services.host_runner_readonly import extended_readonly_profile_names
+
+# Original allowlist (kept first for stable UX / docs); extended names follow alphabetically.
+_ORIGINAL_ORDERED: Final[List[str]] = [
     "apt_list_upgradable",
     "reboot_required",
     "systemctl_is_active",
@@ -19,4 +22,11 @@ HOST_READONLY_PROFILES_ORDERED: Final[List[str]] = [
     "find_large_files",
 ]
 
+_EXT_NAMES = extended_readonly_profile_names()
+_ORIG_SET = frozenset(_ORIGINAL_ORDERED)
+
+HOST_READONLY_PROFILES_ORDERED: Final[List[str]] = _ORIGINAL_ORDERED + sorted(
+    _EXT_NAMES - _ORIG_SET,
+    key=str,
+)
 HOST_READONLY_PROFILES: Final[FrozenSet[str]] = frozenset(HOST_READONLY_PROFILES_ORDERED)

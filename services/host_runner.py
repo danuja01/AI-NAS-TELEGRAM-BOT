@@ -18,6 +18,7 @@ from typing import List, Optional, Sequence, Tuple
 
 import config
 
+from services.host_runner_readonly import build_readonly_extended_inner, extended_readonly_profile_names
 from services.omv_rpc_specs import OMV_RPC_CALLS
 
 logger = logging.getLogger(__name__)
@@ -221,6 +222,15 @@ def run_profile(
         if params_json is not None:
             inner.append(params_json)
         to = min(config.HOST_EXEC_TIMEOUT_SHORT, 120)
+    elif profile in extended_readonly_profile_names():
+        inner_list, v_err, cap = build_readonly_extended_inner(profile, extra_args)
+        if v_err or not inner_list:
+            return HostExecResult(
+                profile, -1, "", "", error=v_err or "invalid read-only profile arguments"
+            )
+        inner = inner_list
+        if cap is not None:
+            to = min(timeout, cap) if timeout is not None else cap
     else:
         return HostExecResult(profile, -1, "", "", error=f"Unknown profile: {profile}")
 

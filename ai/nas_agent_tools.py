@@ -47,6 +47,7 @@ _SMART_DEVICE_RE = re.compile(
 )
 
 from ai.host_read_profiles import HOST_READONLY_PROFILES, HOST_READONLY_PROFILES_ORDERED
+from services.host_runner_readonly import extended_readonly_profile_names
 
 _MAX_SERVICES = 45
 _MAX_SMART_DRIVES = 12
@@ -76,32 +77,31 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
     "nas_host_readonly_profile",
     (
         "Read-only host diagnostics on the OMV/NAS machine via SSH or nsenter (same pipeline as HOST_EXEC_MODE). "
-        "**Not** arbitrary shell — only fixed allowlisted profiles (apt list --upgradable, reboot-required banner, "
-        "systemctl is-active/journalctl tail for allowed systemd units, systemctl --failed, du/find under STORAGE_SCAN_PATHS). "
-        "Units default to MONITOR_SYSTEMD_UNITS; set HOST_READONLY_SYSTEMD_ANY_UNIT=true to allow SSH journal checks (ssh/sshd) "
-        "and other valid unit names — still read-only, no installs/upgrades/filesystem writes via this tool."
+        "**Not** arbitrary shell — only fixed allowlisted profiles (apt/reboot/systemd/journal, du/find under scan paths, "
+        "and many fixed argv probes: hostname, uptime, memory/cpu/disk/network summaries, docker/kubectl/helm read-only, etc.). "
+        "Paths for file/dir probes must be under STORAGE_SCAN_PATHS. "
+        "Units default to MONITOR_SYSTEMD_UNITS; set HOST_READONLY_SYSTEMD_ANY_UNIT=true to allow other valid unit names. "
         "Requires AGENT_HOST_READONLY_TOOL=true at boot. Does **not** replace `/ssh` (root-session shell)."
     ),
     {
         "profile": {
             "type": "string",
             "enum": list(HOST_READONLY_PROFILES_ORDERED),
-            "description": "Predefined read-only operation; pick args below only when required for this profile.",
+            "description": "Predefined read-only operation; use matching parameters below when required.",
         },
         "unit": {
             "type": "string",
             "description": (
-                "systemd unit (e.g. ssh.service, sshd.service, nginx.service). Required for "
-                "systemctl_is_active and journal_tail. "
-                "If HOST_READONLY_SYSTEMD_ANY_UNIT=true, any safe unit syntax is accepted (logs may expose secrets); "
-                "otherwise the unit must be listed in MONITOR_SYSTEMD_UNITS."
+                "systemd unit (e.g. ssh.service, nginx.service). Required for "
+                "systemctl_is_active, journal_tail, systemctl_status, and systemctl_is_enabled. "
+                "If HOST_READONLY_SYSTEMD_ANY_UNIT=true, any safe unit syntax is accepted (logs may expose secrets)."
             ),
         },
         "path": {
             "type": "string",
             "description": (
-                "Absolute path under STORAGE_SCAN_PATHS / bot scan roots; "
-                "required for du_path and find_large_files."
+                "Absolute path under STORAGE_SCAN_PATHS. Required for du_path, find_large_files, host_ls_la, host_du_sh, "
+                "host_stat_file, host_file_cmd, host_readlink, host_realpath, host_file_head, host_file_tail."
             ),
         },
         "min_mb": {
@@ -111,6 +111,16 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
         "max_n": {
             "type": "integer",
             "description": "Maximum file entries for find_large_files (optional, default from host_runner).",
+        },
+        "container": {
+            "type": "string",
+            "description": "Docker container name or id for docker_cli_inspect and docker_cli_logs_tail.",
+        },
+        "line_count": {
+            "type": "integer",
+            "description": (
+                "Line count for host_file_head, host_file_tail, and docker_cli_logs_tail (optional; host_runner caps apply)."
+            ),
         },
     },
     required=["profile"],
@@ -333,7 +343,7 @@ def _exec_host_readonly_profile(user_id: Optional[int], args: Dict[str, Any]) ->
         return json.dumps({"ok": False, "error": f"disallowed profile: {profile!r}"})
 
     extra: List[str] = []
-    if profile in ("systemctl_is_active", "journal_tail"):
+    if profile in ("systemctl_is_active", "journal_tail", "systemctl_status", "systemctl_is_enabled"):
         unit = str(args.get("unit", "")).strip()
         if not unit:
             return json.dumps({"ok": False, "error": "parameter 'unit' is required for this profile"})
@@ -362,7 +372,50 @@ def _exec_host_readonly_profile(user_id: Optional[int], args: Dict[str, Any]) ->
             except (TypeError, ValueError):
                 return json.dumps({"ok": False, "error": "max_n must be an integer"})
         extra = row
-    elif profile not in ("apt_list_upgradable", "reboot_required", "systemctl_failed"):
+    elif profile in (
+        "host_ls_la",
+        "host_du_sh",
+        "host_stat_file",
+        "host_file_cmd",
+        "host_readlink",
+        "host_realpath",
+    ):
+        path = str(args.get("path", "")).strip()
+        if not path:
+            return json.dumps({"ok": False, "error": "parameter 'path' is required for this profile"})
+        extra = [path]
+    elif profile in ("host_file_head", "host_file_tail"):
+        path = str(args.get("path", "")).strip()
+        if not path:
+            return json.dumps({"ok": False, "error": "parameter 'path' is required for this profile"})
+        extra = [path]
+        lc = args.get("line_count")
+        if lc is not None:
+            try:
+                extra.append(str(int(lc)))
+            except (TypeError, ValueError):
+                return json.dumps({"ok": False, "error": "line_count must be an integer"})
+    elif profile == "docker_cli_inspect":
+        c = str(args.get("container", "")).strip()
+        if not c:
+            return json.dumps({"ok": False, "error": "parameter 'container' is required for docker_cli_inspect"})
+        extra = [c]
+    elif profile == "docker_cli_logs_tail":
+        c = str(args.get("container", "")).strip()
+        if not c:
+            return json.dumps({"ok": False, "error": "parameter 'container' is required for docker_cli_logs_tail"})
+        extra = [c]
+        lc = args.get("line_count")
+        if lc is not None:
+            try:
+                extra.append(str(int(lc)))
+            except (TypeError, ValueError):
+                return json.dumps({"ok": False, "error": "line_count must be an integer"})
+    elif profile in ("apt_list_upgradable", "reboot_required", "systemctl_failed"):
+        extra = []
+    elif profile in extended_readonly_profile_names():
+        extra = []
+    else:
         return json.dumps({"ok": False, "error": f"unsupported profile routing: {profile}"})
 
     uid_label = user_id if user_id is not None else "?"
