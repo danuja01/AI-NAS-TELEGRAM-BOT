@@ -153,18 +153,23 @@ async def clear_conversation_history(user_id: int):
     Args:
         user_id: Telegram user ID
     """
+    db = None
     try:
-        async with await get_db() as db:
-            await db.execute(
-                "DELETE FROM conversations WHERE user_id = ?",
-                (user_id,)
-            )
-            await db.commit()
-        
+        # Do not use ``async with await get_db()`` — aiosqlite.Connection is already
+        # started after ``await connect()``; re-entering __aenter__ raises
+        # RuntimeError: threads can only be started once.
+        db = await get_db()
+        await db.execute(
+            "DELETE FROM conversations WHERE user_id = ?",
+            (user_id,),
+        )
+        await db.commit()
         logger.info(f"Cleared conversation history for user {user_id}")
-    
     except Exception as e:
         logger.error(f"Failed to clear conversation history: {e}")
+    finally:
+        if db:
+            await db.close()
 
 
 async def save_command(user_id: int, command: str, output_summary: str = None, success: bool = True):
@@ -209,27 +214,31 @@ async def get_command_history(user_id: int, limit: int = 10) -> List[Dict[str, A
     Returns:
         List of command history entries
     """
+    db = None
     try:
-        async with await get_db() as db:
-            db.row_factory = aiosqlite.Row
-            
-            cursor = await db.execute(
-                """
-                SELECT command, output_summary, success, timestamp
-                FROM command_history
-                WHERE user_id = ?
-                ORDER BY timestamp DESC
-                LIMIT ?
-                """,
-                (user_id, limit)
-            )
-            
-            rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
-    
+        db = await get_db()
+        db.row_factory = aiosqlite.Row
+
+        cursor = await db.execute(
+            """
+            SELECT command, output_summary, success, timestamp
+            FROM command_history
+            WHERE user_id = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        )
+
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
     except Exception as e:
         logger.error(f"Failed to get command history: {e}")
         return []
+    finally:
+        if db:
+            await db.close()
 
 
 async def get_user_preferences(user_id: int) -> Dict[str, str]:
@@ -242,21 +251,25 @@ async def get_user_preferences(user_id: int) -> Dict[str, str]:
     Returns:
         Dictionary of preferences
     """
+    db = None
     try:
-        async with await get_db() as db:
-            db.row_factory = aiosqlite.Row
-            
-            cursor = await db.execute(
-                "SELECT key, value FROM preferences WHERE user_id = ?",
-                (user_id,)
-            )
-            
-            rows = await cursor.fetchall()
-            return {row['key']: row['value'] for row in rows}
-    
+        db = await get_db()
+        db.row_factory = aiosqlite.Row
+
+        cursor = await db.execute(
+            "SELECT key, value FROM preferences WHERE user_id = ?",
+            (user_id,),
+        )
+
+        rows = await cursor.fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
     except Exception as e:
         logger.error(f"Failed to get user preferences: {e}")
         return {}
+    finally:
+        if db:
+            await db.close()
 
 
 async def set_user_preference(user_id: int, key: str, value: str):
@@ -268,19 +281,23 @@ async def set_user_preference(user_id: int, key: str, value: str):
         key: Preference key
         value: Preference value
     """
+    db = None
     try:
-        async with await get_db() as db:
-            await db.execute(
-                """
-                INSERT OR REPLACE INTO preferences (user_id, key, value, updated_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                """,
-                (user_id, key, value)
-            )
-            await db.commit()
-    
+        db = await get_db()
+        await db.execute(
+            """
+            INSERT OR REPLACE INTO preferences (user_id, key, value, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (user_id, key, value),
+        )
+        await db.commit()
+
     except Exception as e:
         logger.error(f"Failed to set user preference: {e}")
+    finally:
+        if db:
+            await db.close()
 
 
 async def save_alert(alert_type: str, severity: str, message: str):
@@ -292,60 +309,72 @@ async def save_alert(alert_type: str, severity: str, message: str):
         severity: Alert severity level
         message: Alert message
     """
+    db = None
     try:
-        async with await get_db() as db:
-            await db.execute(
-                """
-                INSERT INTO alerts (type, severity, message)
-                VALUES (?, ?, ?)
-                """,
-                (alert_type, severity, message)
-            )
-            await db.commit()
-    
+        db = await get_db()
+        await db.execute(
+            """
+            INSERT INTO alerts (type, severity, message)
+            VALUES (?, ?, ?)
+            """,
+            (alert_type, severity, message),
+        )
+        await db.commit()
+
     except Exception as e:
         logger.error(f"Failed to save alert: {e}")
+    finally:
+        if db:
+            await db.close()
 
 
 async def get_unacknowledged_alerts() -> List[Dict[str, Any]]:
     """Get all unacknowledged alerts."""
+    db = None
     try:
-        async with await get_db() as db:
-            db.row_factory = aiosqlite.Row
-            
-            cursor = await db.execute(
-                """
-                SELECT id, type, severity, message, timestamp
-                FROM alerts
-                WHERE acknowledged = FALSE
-                ORDER BY timestamp DESC
-                """
-            )
-            
-            rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
-    
+        db = await get_db()
+        db.row_factory = aiosqlite.Row
+
+        cursor = await db.execute(
+            """
+            SELECT id, type, severity, message, timestamp
+            FROM alerts
+            WHERE acknowledged = FALSE
+            ORDER BY timestamp DESC
+            """
+        )
+
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
     except Exception as e:
         logger.error(f"Failed to get unacknowledged alerts: {e}")
         return []
+    finally:
+        if db:
+            await db.close()
 
 
 async def acknowledge_alert(alert_id: int):
     """Mark an alert as acknowledged."""
+    db = None
     try:
-        async with await get_db() as db:
-            await db.execute(
-                """
-                UPDATE alerts
-                SET acknowledged = TRUE, acknowledged_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (alert_id,)
-            )
-            await db.commit()
-    
+        db = await get_db()
+        await db.execute(
+            """
+            UPDATE alerts
+            SET acknowledged = TRUE, acknowledged_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (alert_id,),
+        )
+        await db.commit()
+
     except Exception as e:
         logger.error(f"Failed to acknowledge alert: {e}")
+    finally:
+        if db:
+            await db.close()
 
 
 async def get_smart_snapshots_dict() -> Dict[str, Dict[str, int]]:
