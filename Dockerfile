@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     smartmontools \
+    hdparm \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better Docker layer caching

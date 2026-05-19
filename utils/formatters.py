@@ -388,6 +388,128 @@ def format_smart_data(drives: List[Dict[str, Any]]) -> str:
     return msg
 
 
+def format_hdd_detail(
+    drives: List[Dict[str, Any]],
+    history_by_device: Dict[str, List[Dict[str, Any]]],
+) -> str:
+    """
+    Extended HDD/SMART detail: power cycles, start/stop, load cycles, hdparm state,
+    and recent counter samples. Uses Telegram HTML.
+    """
+    if not drives:
+        return (
+            "💿 <b>HDD detail</b>\n\n"
+            "<i>No drives found or smartctl not available</i>"
+        )
+
+    msg = (
+        "💿 <b>HDD / SMART detail</b>\n\n"
+        "<i>SMART exposes cumulative counters, not a timestamped spin-down log. "
+        "Samples below are captured on each periodic health SMART check (~15 min).</i>\n\n"
+    )
+
+    def _n(v: Any) -> str:
+        if v is None:
+            return "—"
+        try:
+            return f"{int(v):,}"
+        except (TypeError, ValueError):
+            return _h(v)
+
+    def _d(cur: Any, prev: Any) -> str:
+        if cur is None or prev is None:
+            return ""
+        try:
+            delta = int(cur) - int(prev)
+            if delta == 0:
+                return " <code>(±0)</code>"
+            sign = "+" if delta > 0 else ""
+            return f" <code>({sign}{delta} vs last sample)</code>"
+        except (TypeError, ValueError):
+            return ""
+
+    for drive in drives:
+        name = drive.get("device", "Unknown")
+        health = drive.get("health", "UNKNOWN")
+        icon = (
+            "✅"
+            if health == "PASSED"
+            else "❌" if health == "FAILED" else "⚠️"
+        )
+        msg += f"{icon} <b>{_h(name)}</b>\n"
+        if drive.get("model"):
+            msg += f"  Model: {_h(drive['model'])}\n"
+        msg += f"  SMART: {_h(health)}\n"
+
+        hist = history_by_device.get(name) or []
+        prev = hist[0] if hist else None
+
+        if drive.get("temperature") is not None:
+            msg += f"  Temp: {_n(drive['temperature'])}°C\n"
+        if drive.get("power_on_hours") is not None:
+            msg += f"  Power-on hours: {_n(drive['power_on_hours'])}\n"
+
+        pstate = drive.get("power_state")
+        if pstate:
+            msg += f"  ATA power state (hdparm): {_h(pstate)}\n"
+
+        if drive.get("start_stop_count") is not None:
+            msg += (
+                f"  Start/stop count: {_n(drive['start_stop_count'])}"
+                f"{_d(drive.get('start_stop_count'), prev.get('start_stop') if prev else None)}\n"
+            )
+        if drive.get("load_cycle_count") is not None:
+            msg += (
+                f"  Load cycle count: {_n(drive['load_cycle_count'])}"
+                f"{_d(drive.get('load_cycle_count'), prev.get('load_cycle') if prev else None)}\n"
+            )
+        if drive.get("power_cycle_count") is not None:
+            msg += (
+                f"  Power cycle count: {_n(drive['power_cycle_count'])}"
+                f"{_d(drive.get('power_cycle_count'), prev.get('power_cycles') if prev else None)}\n"
+            )
+        if drive.get("poweroff_retract_count") is not None:
+            msg += f"  Power-off retract: {_n(drive['poweroff_retract_count'])}\n"
+        if drive.get("reallocated_sectors"):
+            msg += f"  Reallocated sectors: {_n(drive['reallocated_sectors'])}\n"
+        if drive.get("pending_sectors"):
+            msg += f"  Pending sectors: {_n(drive['pending_sectors'])}\n"
+
+        if hist:
+            msg += "  <b>Recent samples</b> (newest first):\n"
+            for i, row in enumerate(hist[:10]):
+                ts = row.get("recorded_at") or ""
+                line = (
+                    f"   • {_h(ts)}  start/stop {_n(row.get('start_stop'))}  "
+                    f"load {_n(row.get('load_cycle'))}  power {_n(row.get('power_cycles'))}"
+                )
+                older = hist[i + 1] if i + 1 < len(hist) else None
+                if older and row.get("start_stop") is not None and older.get("start_stop") is not None:
+                    try:
+                        ds = int(row["start_stop"]) - int(older["start_stop"])
+                        if ds != 0:
+                            line += f"  <code>Δstop {ds:+d}</code>"
+                    except (TypeError, ValueError):
+                        pass
+                if older and row.get("load_cycle") is not None and older.get("load_cycle") is not None:
+                    try:
+                        dl = int(row["load_cycle"]) - int(older["load_cycle"])
+                        if dl != 0:
+                            line += f" <code>Δload {dl:+d}</code>"
+                    except (TypeError, ValueError):
+                        pass
+                msg += line + "\n"
+        else:
+            msg += (
+                "  <i>No stored samples yet; wait for the next SMART health interval, "
+                "then run again.</i>\n"
+            )
+
+        msg += "\n"
+
+    return msg
+
+
 def format_error(error_msg: str) -> str:
     """Format error message."""
     return f"❌ **Error**\n\n{error_msg}"

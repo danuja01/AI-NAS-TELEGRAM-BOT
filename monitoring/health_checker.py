@@ -15,6 +15,7 @@ from telegram.constants import ParseMode
 import config
 from database.memory import (
     add_metric_sample,
+    append_drive_spin_samples,
     get_metrics_digest_stats,
     get_smart_snapshots_dict,
     save_alert,
@@ -147,6 +148,7 @@ async def check_system_health(bot: Bot):
                 all_alerts.extend(check_smart_delta_alerts(drives, prev))
                 all_alerts.extend(check_smart_alerts(drives))
                 await upsert_smart_snapshots(drives)
+                await append_drive_spin_samples(drives)
             except Exception:
                 logger.debug("SMART check skipped", exc_info=True)
 

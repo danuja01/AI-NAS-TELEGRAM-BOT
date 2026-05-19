@@ -21,6 +21,7 @@ from utils.formatters import (
     format_network_stats,
     format_health_score,
     format_smart_data,
+    format_hdd_detail,
     format_uptime,
     format_error_html,
 )
@@ -34,8 +35,9 @@ from services.system_monitor import (
     get_uptime,
     calculate_health_score,
 )
-from services.smart_monitor import get_all_drives, check_drive_warnings
-from database.memory import save_conversation, save_command
+from services.smart_monitor import get_all_drives, check_drive_warnings, get_hdparm_power_state
+from database.memory import save_conversation, save_command, get_drive_spin_history
+from utils.telegram_reply import reply_text_chunked
 
 logger = logging.getLogger(__name__)
 
@@ -300,3 +302,51 @@ async def smart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def drives_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /drives command - Alias for /smart."""
     await smart_command(update, context)
+
+
+@require_auth
+@rate_limit
+async def hdddetail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """SMART + spin/load-cycle counters, hdparm power state, recent sampled history."""
+    user_id = update.effective_user.id
+
+    try:
+        await reply_text_safe(update, "💿 Reading SMART, power state, and history…")
+
+        drives = get_all_drives()
+        if not drives:
+            await reply_text_safe(
+                update,
+                "⚠️ No SMART data available.\n\n"
+                "Make sure smartmontools is installed and devices are visible in the container.",
+                **_monitoring_kw(),
+            )
+            return
+
+        for d in drives:
+            dev = d.get("device") or ""
+            if dev:
+                d["power_state"] = get_hdparm_power_state(dev)
+
+        history_by_device: dict = {}
+        for d in drives:
+            dev = d.get("device") or ""
+            if dev:
+                history_by_device[dev] = await get_drive_spin_history(dev, limit=14)
+
+        message = format_hdd_detail(drives, history_by_device)
+        warnings = check_drive_warnings(drives)
+        if warnings:
+            wlines = "\n".join(escape_telegram_html(w) for w in warnings)
+            message += "\n<b>Warnings:</b>\n" + wlines
+
+        await reply_text_chunked(update, message, parse_mode=ParseMode.HTML)
+
+        await save_conversation(user_id, "user", "/hdddetail")
+        await save_command(user_id, "/hdddetail", f"{len(drives)} drives")
+
+    except Exception as e:
+        logger.error("Error in hdddetail_command: %s", e, exc_info=True)
+        await reply_text_safe(
+            update, format_error_html(f"Failed to get HDD details: {e}"), **_monitoring_kw()
+        )

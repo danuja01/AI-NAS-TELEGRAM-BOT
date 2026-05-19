@@ -399,6 +399,69 @@ async def upsert_smart_snapshots(drives: List[Dict[str, Any]]):
             await db.close()
 
 
+async def append_drive_spin_samples(drives: List[Dict[str, Any]]):
+    """
+    Append one spin/power-cycle counter row per drive (called from periodic health job).
+    Retains roughly 30 days of rows (pruned on each run).
+    """
+    if not drives:
+        return
+    db = None
+    try:
+        db = await get_db()
+        for d in drives:
+            dev = d.get("device") or ""
+            if not dev:
+                continue
+            await db.execute(
+                """
+                INSERT INTO drive_spin_history (device, start_stop, load_cycle, power_cycles)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    dev,
+                    d.get("start_stop_count"),
+                    d.get("load_cycle_count"),
+                    d.get("power_cycle_count"),
+                ),
+            )
+        await db.execute(
+            "DELETE FROM drive_spin_history WHERE recorded_at < datetime('now', '-30 days')"
+        )
+        await db.commit()
+    except Exception as e:
+        logger.error("append_drive_spin_samples: %s", e)
+    finally:
+        if db:
+            await db.close()
+
+
+async def get_drive_spin_history(device: str, limit: int = 14) -> List[Dict[str, Any]]:
+    """Recent spin-counter samples for one device, newest first."""
+    db = None
+    try:
+        db = await get_db()
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT device, recorded_at, start_stop, load_cycle, power_cycles
+            FROM drive_spin_history
+            WHERE device = ?
+            ORDER BY recorded_at DESC
+            LIMIT ?
+            """,
+            (device, limit),
+        )
+        rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error("get_drive_spin_history: %s", e)
+        return []
+    finally:
+        if db:
+            await db.close()
+
+
 async def add_metric_sample(
     cpu_percent: float,
     memory_percent: float,

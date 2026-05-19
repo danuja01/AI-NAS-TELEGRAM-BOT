@@ -62,6 +62,7 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("health", "Health score"),
     BotCommand("smart", "Drive SMART"),
     BotCommand("drives", "Same as SMART"),
+    BotCommand("hdddetail", "HDD SMART + spin history"),
     BotCommand("docker", "Docker containers"),
     BotCommand("containers", "Docker list alias"),
     BotCommand("dstart", "Start a container"),
@@ -173,6 +174,7 @@ def main():
     application.add_handler(CommandHandler("health", monitoring.health_command))
     application.add_handler(CommandHandler("smart", monitoring.smart_command))
     application.add_handler(CommandHandler("drives", monitoring.drives_command))
+    application.add_handler(CommandHandler("hdddetail", monitoring.hdddetail_command))
     
     # Register command handlers - Docker
     application.add_handler(CommandHandler("docker", docker_cmds.docker_command))

@@ -86,6 +86,18 @@ CREATE TABLE IF NOT EXISTS metric_samples (
 );
 
 CREATE INDEX IF NOT EXISTS idx_metric_samples_recorded ON metric_samples(recorded_at);
+
+-- Periodic SMART samples for spin/load-cycle trend (see /hdddetail)
+CREATE TABLE IF NOT EXISTS drive_spin_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device TEXT NOT NULL,
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    start_stop INTEGER,
+    load_cycle INTEGER,
+    power_cycles INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_drive_spin_device_time ON drive_spin_history(device, recorded_at);
 """
 
 

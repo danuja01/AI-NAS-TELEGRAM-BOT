@@ -68,6 +68,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/health` - System health score
 `/smart` - Drive health (SMART data)
 `/drives` - List all drives
+`/hdddetail` - HDD details: power/spin counters, hdparm state, sample history
 
 **🐳 Docker**
 `/docker` - List all containers
