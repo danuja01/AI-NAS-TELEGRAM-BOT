@@ -1,6 +1,6 @@
 # Deploy to your NAS over Tailscale (GitHub runner joins your tailnet → SSH → docker compose).
 #
-# Pipeline: smoke Docker build must succeed before deploy runs (`needs: smoke`).
+# Pipeline: reusable smoke workflow must pass before deploy runs (`needs: smoke`).
 #
 # Who can trigger deploy?
 # - push to `main` only (no pull_request — avoids fork PRs running deploy).
@@ -39,16 +39,7 @@ concurrency:
 
 jobs:
   smoke:
-    name: Docker smoke build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Build the Docker image
-        run: |
-          docker build . \
-            --file Dockerfile \
-            --tag nas-telegram-bot:${{ github.event_name }}-${{ github.sha }}
+    uses: ./.github/workflows/smoke.yml
 
   deploy:
     name: Deploy via Tailscale + SSH

@@ -1,0 +1,34 @@
+# Import + Docker build smoke tests. Blocks broken images from reaching NAS deploy.
+#
+# Triggers:
+#   - pull_request to main (standalone gate for PRs)
+#   - workflow_call from deploy-nas.yml (gate before SSH deploy on push to main)
+#
+# Fails if bot.py or command modules cannot import (e.g. missing formatter submodules).
+
+name: Smoke tests
+
+on:
+  workflow_call:
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    name: Docker build + import smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build the Docker image
+        run: |
+          docker build . \
+            --file Dockerfile \
+            --tag nas-telegram-bot:${{ github.event_name }}-${{ github.sha }}
+
+      - name: Smoke test — verify application imports
+        run: |
+          docker run --rm \
+            --entrypoint python \
+            nas-telegram-bot:${{ github.event_name }}-${{ github.sha }} \
+            scripts/smoke_imports.py
