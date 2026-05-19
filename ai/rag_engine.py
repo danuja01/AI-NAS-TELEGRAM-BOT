@@ -266,6 +266,8 @@ async def ask(
         rag_system = (
             "You are a helpful AI assistant for a NAS Telegram bot. Answer using the provided context. "
             "The command reference describes what users can type in Telegram. "
+            "You have tools to read live data from this host (temperatures, disks, SMART, Docker, etc.). "
+            "If the question is about the user's own NAS state, call tools first; do not invent readings. "
             "If the context does not contain the answer, say so. Be concise and accurate."
         )
 
