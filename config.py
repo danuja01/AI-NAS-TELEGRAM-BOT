@@ -157,6 +157,26 @@ CRON_NOTIFY_PORT = int(os.getenv("CRON_NOTIFY_PORT", "18765"))
 METRICS_SAMPLE_INTERVAL_MINUTES = int(os.getenv("METRICS_SAMPLE_INTERVAL_MINUTES", "15"))
 DIGEST_INTERVAL_HOURS = int(os.getenv("DIGEST_INTERVAL_HOURS", "24"))
 
+# Docker / storage management (/d* commands)
+STORAGE_CMD_TIMEOUT = int(os.getenv("STORAGE_CMD_TIMEOUT", "120"))
+STORAGE_SCAN_TIMEOUT = int(os.getenv("STORAGE_SCAN_TIMEOUT", "300"))
+STORAGE_FIND_MIN_MB = int(os.getenv("STORAGE_FIND_MIN_MB", "500"))
+STORAGE_LOG_MIN_MB = int(os.getenv("STORAGE_LOG_MIN_MB", "100"))
+STORAGE_LOW_DISK_PERCENT = int(os.getenv("STORAGE_LOW_DISK_PERCENT", "90"))
+STORAGE_WEEKLY_SCAN_ENABLED = _env_bool("STORAGE_WEEKLY_SCAN_ENABLED", False)
+DOCKER_CLEAN_DRY_RUN_DEFAULT = _env_bool("DOCKER_CLEAN_DRY_RUN_DEFAULT", False)
+
+_default_scan_paths = "/var/lib/docker,/var/log"
+if DOCUMENT_PATH:
+    _default_scan_paths += f",{DOCUMENT_PATH}"
+if DISK_ROOT_PATH:
+    _default_scan_paths += f",{DISK_ROOT_PATH}"
+STORAGE_SCAN_PATHS = [
+    p.strip()
+    for p in os.getenv("STORAGE_SCAN_PATHS", _default_scan_paths).split(",")
+    if p.strip()
+]
+
 # Validation
 def validate_config():
     """Validate required configuration."""

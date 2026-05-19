@@ -28,6 +28,7 @@ from monitoring.alerts import (
     check_memory_alerts,
     check_smart_alerts,
     check_smart_delta_alerts,
+    check_storage_low_disk_alerts,
     check_temperature_alerts,
 )
 from monitoring.cron_notify_server import start_cron_notify_server
@@ -128,6 +129,8 @@ async def check_system_health(bot: Bot):
 
         disk_stats = get_disk_stats()
         all_alerts.extend(check_disk_alerts(disk_stats))
+        if config.STORAGE_LOW_DISK_PERCENT:
+            all_alerts.extend(check_storage_low_disk_alerts(disk_stats))
 
         temps = get_temperatures()
         all_alerts.extend(check_temperature_alerts(temps))
@@ -298,6 +301,18 @@ async def start_health_monitoring(bot: Bot):
         args=[bot],
         id="digest",
     )
+    if config.STORAGE_WEEKLY_SCAN_ENABLED:
+        from commands.docker_storage_cmds import run_weekly_scan_report
+
+        _scheduler.add_job(
+            run_weekly_scan_report,
+            "cron",
+            day_of_week="sun",
+            hour=9,
+            minute=0,
+            args=[bot],
+            id="weekly_storage_scan",
+        )
     _scheduler.start()
 
     try:

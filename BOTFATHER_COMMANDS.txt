@@ -12,12 +12,21 @@ health - System health score
 smart - Drive health (SMART data)
 drives - List all drives
 
-docker - List all containers
-containers - List all containers
-restart - Restart a container
-stop - Stop a container
-start - Start a container
-logs - View container logs
+ddocker - Docker dashboard
+dscan - Docker storage scan
+dclean - Safe Docker cleanup
+dprune - Quick Docker prune
+dimages - Docker images
+dbigfiles - Largest files
+dlogs - Huge log files
+dhealth - NAS Docker health
+daggressive - Aggressive cleanup
+dstart - Start a container
+drestart - Restart a container
+dstop - Stop a container
+dtail - Container log tail
+docker - Alias for ddocker
+containers - Alias for ddocker
 
 files - Browse default document path
 ls - List directory with numbered files

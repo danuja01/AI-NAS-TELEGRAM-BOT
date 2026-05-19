@@ -462,6 +462,32 @@ async def get_drive_spin_history(device: str, limit: int = 14) -> List[Dict[str,
             await db.close()
 
 
+async def save_storage_snapshot(
+    reclaimable_hint: str = "",
+    disk_min_free_percent: Optional[float] = None,
+    docker_df_excerpt: str = "",
+):
+    db = None
+    try:
+        db = await get_db()
+        await db.execute(
+            """
+            INSERT INTO storage_snapshots (reclaimable_hint, disk_min_free_percent, docker_df_excerpt)
+            VALUES (?, ?, ?)
+            """,
+            (reclaimable_hint, disk_min_free_percent, docker_df_excerpt),
+        )
+        await db.execute(
+            "DELETE FROM storage_snapshots WHERE recorded_at < datetime('now', '-90 days')"
+        )
+        await db.commit()
+    except Exception as e:
+        logger.error("save_storage_snapshot: %s", e)
+    finally:
+        if db:
+            await db.close()
+
+
 async def add_metric_sample(
     cpu_percent: float,
     memory_percent: float,

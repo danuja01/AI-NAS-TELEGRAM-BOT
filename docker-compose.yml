@@ -47,6 +47,11 @@ services:
       # Re-index RAG docs after each container start + notify ALLOWED_USER_IDS on Telegram
       - AUTO_INDEX_ON_START=${AUTO_INDEX_ON_START:-true}
       - AUTO_INDEX_FORCE_REINDEX=${AUTO_INDEX_FORCE_REINDEX:-false}
+      - STORAGE_CMD_TIMEOUT=${STORAGE_CMD_TIMEOUT:-120}
+      - STORAGE_SCAN_TIMEOUT=${STORAGE_SCAN_TIMEOUT:-300}
+      - STORAGE_LOW_DISK_PERCENT=${STORAGE_LOW_DISK_PERCENT:-90}
+      - STORAGE_WEEKLY_SCAN_ENABLED=${STORAGE_WEEKLY_SCAN_ENABLED:-false}
+      - DOCKER_CLEAN_DRY_RUN_DEFAULT=${DOCKER_CLEAN_DRY_RUN_DEFAULT:-false}
 
     # Mount volumes for persistent data
     volumes:

@@ -28,7 +28,7 @@ from monitoring.health_checker import start_health_monitoring
 from utils.startup_auto_index import run_auto_index_on_startup
 
 # Import command handlers
-from commands import basic, monitoring, docker_cmds, filesystem, ai_cmds, service, root_cmds, operations
+from commands import basic, monitoring, docker_cmds, docker_storage_cmds, filesystem, ai_cmds, service, root_cmds, operations
 from commands import text_followup
 
 # Setup logging
@@ -65,12 +65,19 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("smart", "Drive SMART"),
     BotCommand("drives", "Same as SMART"),
     BotCommand("hdddetail", "HDD SMART + spin history"),
-    BotCommand("docker", "Docker containers"),
-    BotCommand("containers", "Docker list alias"),
+    BotCommand("ddocker", "Docker dashboard"),
+    BotCommand("dscan", "Docker storage scan"),
+    BotCommand("dclean", "Safe Docker cleanup"),
+    BotCommand("dprune", "Quick Docker prune"),
+    BotCommand("dimages", "Docker images"),
+    BotCommand("dbigfiles", "Largest files"),
+    BotCommand("dlogs", "Huge log files"),
+    BotCommand("dhealth", "NAS + Docker health"),
+    BotCommand("daggressive", "Aggressive cleanup"),
     BotCommand("dstart", "Start a container"),
-    BotCommand("restart", "Restart a container"),
-    BotCommand("stop", "Stop a container"),
-    BotCommand("logs", "Container logs"),
+    BotCommand("drestart", "Restart a container"),
+    BotCommand("dstop", "Stop a container"),
+    BotCommand("dtail", "Container log tail"),
     BotCommand("files", "Browse files"),
     BotCommand("ls", "List directory"),
     BotCommand("find", "Find files"),
@@ -182,13 +189,32 @@ def main():
     application.add_handler(CommandHandler("drives", monitoring.drives_command))
     application.add_handler(CommandHandler("hdddetail", monitoring.hdddetail_command))
     
-    # Register command handlers - Docker
+    # Register command handlers - Docker lifecycle
     application.add_handler(CommandHandler("docker", docker_cmds.docker_command))
     application.add_handler(CommandHandler("containers", docker_cmds.containers_command))
     application.add_handler(CommandHandler("restart", docker_cmds.restart_command))
     application.add_handler(CommandHandler("stop", docker_cmds.stop_command))
-    application.add_handler(CommandHandler("dstart", docker_cmds.start_container_command))
     application.add_handler(CommandHandler("logs", docker_cmds.logs_command))
+    application.add_handler(CommandHandler("dstart", docker_cmds.start_container_command))
+    application.add_handler(CommandHandler("drestart", docker_cmds.drestart_command))
+    application.add_handler(CommandHandler("dstop", docker_cmds.dstop_command))
+    application.add_handler(CommandHandler("dtail", docker_cmds.dtail_command))
+    # Docker + storage management
+    application.add_handler(CommandHandler("ddocker", docker_storage_cmds.ddocker_command))
+    application.add_handler(CommandHandler("dscan", docker_storage_cmds.dscan_command))
+    application.add_handler(CommandHandler("dclean", docker_storage_cmds.dclean_command))
+    application.add_handler(CommandHandler("daggressive", docker_storage_cmds.daggressive_command))
+    application.add_handler(CommandHandler("dbigfiles", docker_storage_cmds.dbigfiles_command))
+    application.add_handler(CommandHandler("dimages", docker_storage_cmds.dimages_command))
+    application.add_handler(CommandHandler("dprune", docker_storage_cmds.dprune_command))
+    application.add_handler(CommandHandler("dlogs", docker_storage_cmds.dlogs_command))
+    application.add_handler(CommandHandler("dhealth", docker_storage_cmds.dhealth_command))
+    application.add_handler(
+        CallbackQueryHandler(
+            docker_storage_cmds.handle_storage_callbacks,
+            pattern=r"^d(clean|aggressive)_",
+        )
+    )
     
     # Register command handlers - File System
     application.add_handler(CommandHandler("files", filesystem.files_command))

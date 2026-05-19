@@ -70,13 +70,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/drives` - List all drives
 `/hdddetail` - HDD details: power/spin counters, hdparm state, sample history
 
-**🐳 Docker**
-`/docker` - List all containers
-`/containers` - Alias for /docker
-`/restart <name>` - Restart a container
-`/stop <name>` - Stop a container
-`/dstart <name>` - Start a container
-`/logs <name> [lines]` - View container logs
+**🐳 Docker & storage**
+`/ddocker` - Docker dashboard
+`/dscan` - Full Docker + disk scan
+`/dclean` - Safe cleanup (confirm)
+`/dprune` - Quick dangling prune
+`/daggressive` - Aggressive cleanup (2-step confirm)
+`/dimages` - List images (unused/dangling)
+`/dbigfiles` - Largest files (allowlisted paths)
+`/dlogs` - Huge log files
+`/dhealth` - NAS + Docker health report
+`/dstart` / `/drestart` / `/dstop` / `/dtail` - Container control
+`/docker` - Alias for `/ddocker`
 
 **📁 File System**
 `/files` - Browse default document path

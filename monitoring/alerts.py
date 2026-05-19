@@ -10,6 +10,25 @@ import config
 logger = logging.getLogger(__name__)
 
 
+def check_storage_low_disk_alerts(disk_stats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Alert when any mount exceeds STORAGE_LOW_DISK_PERCENT used."""
+    alerts = []
+    threshold = getattr(config, "STORAGE_LOW_DISK_PERCENT", 90)
+    for disk in disk_stats:
+        percent = float(disk.get("percent", 0))
+        mountpoint = disk.get("mountpoint", "Unknown")
+        if percent >= threshold:
+            alerts.append({
+                "type": "disk",
+                "severity": "critical" if percent >= 95 else "warning",
+                "message": (
+                    f"Disk almost full on {mountpoint}: {percent:.1f}% used "
+                    f"(threshold {threshold}%). Try /dscan and /dclean"
+                ),
+            })
+    return alerts
+
+
 def check_disk_alerts(disk_stats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Check disk space alerts."""
     alerts = []

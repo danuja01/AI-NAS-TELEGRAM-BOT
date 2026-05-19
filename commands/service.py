@@ -211,7 +211,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             shutdown_system()
         
         # Handle Docker confirmations (delegated to docker_cmds module)
-        elif data.startswith(("restart_confirm_", "stop_confirm_")):
+        elif data.startswith(("drestart_confirm_", "dstop_confirm_", "restart_confirm_", "stop_confirm_")):
             from commands.docker_cmds import handle_docker_confirmation
             await handle_docker_confirmation(update, context)
     

@@ -21,6 +21,8 @@ import config
 logger = logging.getLogger(__name__)
 
 _UNIT_RE = re.compile(r"^[a-zA-Z0-9_.@-]+$")
+# Allowlisted absolute paths for storage scans (must match config.STORAGE_SCAN_PATHS prefix)
+_SCAN_PATH_RE = re.compile(r"^/[a-zA-Z0-9_./-]+$")
 
 
 @dataclass
@@ -46,6 +48,17 @@ def _validate_unit(unit: str) -> bool:
     if not unit or not _UNIT_RE.match(unit):
         return False
     return unit in config.MONITOR_SYSTEMD_UNITS
+
+
+def _validate_scan_path(path: str) -> bool:
+    if not path or not _SCAN_PATH_RE.match(path):
+        return False
+    path = path.rstrip("/") or "/"
+    for allowed in config.STORAGE_SCAN_PATHS:
+        root = allowed.rstrip("/") or "/"
+        if path == root or path.startswith(root + "/"):
+            return True
+    return False
 
 
 def _build_argv_nsenter(inner: Sequence[str]) -> List[str]:
@@ -126,6 +139,39 @@ def run_profile(
             )
         n = str(min(50, max(5, config.JOURNAL_TAIL_LINES)))
         inner = ["journalctl", "-u", extra_args[0], "-n", n, "--no-pager"]
+    elif profile == "du_path":
+        if len(extra_args) != 1 or not _validate_scan_path(extra_args[0]):
+            return HostExecResult(profile, -1, "", "", error="Invalid or disallowed scan path")
+        inner = ["du", "-h", "--max-depth=1", extra_args[0]]
+        to = config.STORAGE_CMD_TIMEOUT
+    elif profile == "find_large_files":
+        if len(extra_args) < 2 or not _validate_scan_path(extra_args[0]):
+            return HostExecResult(profile, -1, "", "", error="Invalid or disallowed scan path")
+        try:
+            min_mb = int(extra_args[1])
+            max_n = int(extra_args[2]) if len(extra_args) > 2 else 20
+        except ValueError:
+            return HostExecResult(profile, -1, "", "", error="Invalid find size/limit args")
+        min_mb = max(1, min(min_mb, 10000))
+        max_n = max(1, min(max_n, 50))
+        inner = [
+            "find",
+            extra_args[0],
+            "-xdev",
+            "-type",
+            "f",
+            "-size",
+            f"+{min_mb}M",
+            "-printf",
+            "%s %p\n",
+        ]
+        to = config.STORAGE_CMD_TIMEOUT
+    elif profile == "systemctl_failed":
+        inner = ["systemctl", "--failed", "--no-pager", "--plain", "--no-legend"]
+        to = config.STORAGE_CMD_TIMEOUT
+    elif profile == "apt_clean":
+        inner = ["apt-get", "clean", "-qq"]
+        to = config.STORAGE_CMD_TIMEOUT
     else:
         return HostExecResult(profile, -1, "", "", error=f"Unknown profile: {profile}")
 

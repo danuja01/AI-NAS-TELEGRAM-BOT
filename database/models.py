@@ -98,6 +98,17 @@ CREATE TABLE IF NOT EXISTS drive_spin_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_drive_spin_device_time ON drive_spin_history(device, recorded_at);
+
+-- Docker storage scan snapshots (/dscan, weekly report)
+CREATE TABLE IF NOT EXISTS storage_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    reclaimable_hint TEXT,
+    disk_min_free_percent REAL,
+    docker_df_excerpt TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_storage_snapshots_recorded ON storage_snapshots(recorded_at);
 """
 
 
