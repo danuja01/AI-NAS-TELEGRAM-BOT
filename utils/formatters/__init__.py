@@ -6,7 +6,7 @@ Monitoring-style formatters use Telegram HTML (safe for dynamic system text).
 import html
 import re
 from datetime import datetime, timedelta
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Optional
 
 import config
 
@@ -145,6 +145,37 @@ def format_memory_stats(mem_stats: Dict[str, Any]) -> str:
     return msg
 
 
+def _usage_bar_html(percent: Any, width: int = 10) -> str:
+    """Compact Unicode usage bar for Telegram HTML (no pipe tables)."""
+    try:
+        p = float(percent)
+    except (TypeError, ValueError):
+        return "▱" * width
+    p = max(0.0, min(100.0, p))
+    filled = int(round(width * p / 100.0))
+    filled = min(width, max(0, filled))
+    bar = "▰" * filled + "▱" * (width - filled)
+    return f"{bar} <code>{p:.0f}%</code>"
+
+
+def _omv_size_to_int(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    s = str(value).strip().replace(",", "")
+    if not s:
+        return None
+    try:
+        return int(float(s))
+    except (TypeError, ValueError):
+        return None
+
+
 def format_disk_stats(disk_stats: List[Dict[str, Any]]) -> str:
     """Format disk statistics (Telegram HTML)."""
     msg = "💾 <b>Disk Statistics</b>\n\n"
@@ -157,8 +188,129 @@ def format_disk_stats(disk_stats: List[Dict[str, Any]]) -> str:
         msg += f"  Total: {disk.get('total_gb', 0):.1f} GB\n"
         msg += f"  Used: {disk.get('used_gb', 0):.1f} GB\n"
         msg += f"  Free: {disk.get('free_gb', 0):.1f} GB\n"
-        msg += f"  Usage: {disk.get('percent', 0):.1f}%\n\n"
+        msg += f"  Usage: {disk.get('percent', 0):.1f}%\n"
+        msg += f"  {_usage_bar_html(disk.get('percent', 0))}\n\n"
 
+    return msg
+
+
+def format_omv_filesystems_panel(rows: List[Dict[str, Any]], max_rows: int = 14) -> str:
+    """OMV ``enumerateMountedFilesystems`` as a readable panel (Telegram HTML)."""
+    if not rows:
+        return ""
+    lines: List[str] = []
+    lines.append("🧾 <b>OpenMediaVault — filesystems</b>\n")
+    for r in rows[:max_rows]:
+        mp = r.get("mountpoint") or "—"
+        typ = r.get("type") or "—"
+        dev = r.get("devicefile") or "—"
+        pct = r.get("percentage")
+        desc = r.get("description") or ""
+        used = r.get("used")
+        avail = r.get("available")
+        sz = _omv_size_to_int(r.get("size"))
+        sz_h = format_bytes(sz) if sz is not None else "—"
+        bar = _usage_bar_html(pct if pct is not None else 0)
+        lines.append(f"<b>{_h(mp)}</b> <code>{_h(typ)}</code>")
+        lines.append(f"  {_h(bar)}")
+        lines.append(f"  Device: <code>{_h(dev)}</code>")
+        lines.append(f"  OMV used/avail: {_h(used)} / {_h(avail)}  ·  size {_h(sz_h)}")
+        if desc:
+            lines.append(f"  <i>{_h(desc)}</i>")
+        lines.append("")
+    if len(rows) > max_rows:
+        lines.append(f"<i>… {_h(len(rows) - max_rows)} more not shown</i>\n")
+    return "\n".join(lines)
+
+
+def format_omv_physical_disks_panel(rows: List[Dict[str, Any]], max_rows: int = 16) -> str:
+    """OMV ``DiskMgmt::enumerateDevices`` summary (Telegram HTML)."""
+    if not rows:
+        return ""
+    lines: List[str] = []
+    lines.append("💿 <b>OpenMediaVault — physical disks</b>\n")
+    for r in rows[:max_rows]:
+        dev = r.get("devicefile") or r.get("canonicaldevicefile") or "—"
+        model = r.get("model") or "—"
+        serial = r.get("serialnumber") or "—"
+        sz = _omv_size_to_int(r.get("size"))
+        sz_h = format_bytes(sz) if sz is not None else "—"
+        temp = r.get("temperature")
+        pm = r.get("powermode") or "—"
+        wwn = r.get("wwn") or ""
+        flags = []
+        if r.get("isroot"):
+            flags.append("root")
+        if r.get("isreadonly"):
+            flags.append("ro")
+        if r.get("israid"):
+            flags.append("raid")
+        fl = f" ({', '.join(flags)})" if flags else ""
+        lines.append(f"<b><code>{_h(dev)}</code></b>{_h(fl)}")
+        lines.append(f"  {_h(model)} · {_h(sz_h)}")
+        lines.append(
+            f"  S/N <code>{_h(serial)}</code>"
+            + (f" · WWN <code>{_h(wwn)}</code>" if wwn else "")
+        )
+        lines.append(f"  SMART temp: {_h(temp) if temp not in (None, '') else '—'} · power {_h(pm)}")
+        lines.append("")
+    if len(rows) > max_rows:
+        lines.append(f"<i>… {_h(len(rows) - max_rows)} more not shown</i>\n")
+    return "\n".join(lines)
+
+
+def format_omv_smart_devices_panel(rows: List[Dict[str, Any]], max_rows: int = 16) -> str:
+    """OMV ``Smart::enumerateDevices`` (overall status as seen by OMV)."""
+    if not rows:
+        return ""
+    lines: List[str] = []
+    lines.append("🩺 <b>OpenMediaVault — SMART overview</b>\n")
+    for r in rows[:max_rows]:
+        dev = r.get("devicefile") or "—"
+        st = r.get("overallstatus")
+        model = r.get("model") or ""
+        temp = r.get("temperature")
+        sn = r.get("serialnumber") or ""
+        lines.append(f"<b><code>{_h(dev)}</code></b>")
+        if model:
+            lines.append(f"  {_h(model)}")
+        if sn:
+            lines.append(f"  S/N <code>{_h(sn)}</code>")
+        lines.append(f"  OMV status: <code>{_h(st)}</code> · temp {_h(temp) if temp not in (None, '') else '—'}")
+        lines.append("")
+    if len(rows) > max_rows:
+        lines.append(f"<i>… {_h(len(rows) - max_rows)} more not shown</i>\n")
+    return "\n".join(lines)
+
+
+def format_disks_with_omv(
+    disk_stats: List[Dict[str, Any]],
+    omv_fs: List[Dict[str, Any]],
+    omv_disks: List[Dict[str, Any]],
+    omv_banner: Optional[str] = None,
+) -> str:
+    """Live ``psutil`` mounts plus optional OMV RPC panels."""
+    msg = format_disk_stats(disk_stats)
+    if omv_banner:
+        msg += f"\n{_h(omv_banner)}\n"
+    if omv_fs:
+        msg += "\n" + format_omv_filesystems_panel(omv_fs)
+    if omv_disks:
+        msg += "\n" + format_omv_physical_disks_panel(omv_disks)
+    return msg
+
+
+def format_smart_with_omv(
+    drives: List[Dict[str, Any]],
+    omv_smart: List[Dict[str, Any]],
+    omv_banner: Optional[str] = None,
+) -> str:
+    """SMART from smartctl plus optional OMV SMART enumeration."""
+    msg = format_smart_data(drives)
+    if omv_banner:
+        msg += f"\n{_h(omv_banner)}\n"
+    if omv_smart:
+        msg += "\n" + format_omv_smart_devices_panel(omv_smart)
     return msg
 
 
@@ -505,6 +657,21 @@ def format_hdd_detail(
         msg += "\n"
 
     return msg
+
+
+def format_hdd_detail_with_omv(
+    drives: List[Dict[str, Any]],
+    history_by_device: Dict[str, List[Dict[str, Any]]],
+    omv_disks: Optional[List[Dict[str, Any]]] = None,
+    omv_banner: Optional[str] = None,
+) -> str:
+    """``format_hdd_detail`` with optional OMV physical disk inventory header."""
+    prefix = ""
+    if omv_banner:
+        prefix += f"ℹ️ <i>{_h(omv_banner)}</i>\n\n"
+    if omv_disks:
+        prefix += format_omv_physical_disks_panel(omv_disks) + "\n"
+    return prefix + format_hdd_detail(drives, history_by_device)
 
 
 def format_error(error_msg: str) -> str:

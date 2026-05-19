@@ -269,7 +269,7 @@ async def ask(
         rag_system = (
             "You are a helpful AI assistant for a NAS Telegram bot. Answer using the provided context. "
             "The command reference describes what users can type in Telegram. "
-            "You have tools to read live data from this host (temperatures, disks, SMART, Docker, etc.). "
+            "You have tools to read live data from this host (temperatures, disks, SMART, Docker, OpenMediaVault RPC when available, etc.). "
             "You may call **nas_request_docker_restart** or **nas_request_docker_stop** to post the same inline "
             "Confirm/Cancel prompts as /drestart and /dstop; nothing runs until the user confirms. "
             "Do not use markdown pipe tables in replies; use bullet lists. "

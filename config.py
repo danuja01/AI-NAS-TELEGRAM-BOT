@@ -131,6 +131,10 @@ HOST_EXEC_TIMEOUT_LONG = int(os.getenv("HOST_EXEC_TIMEOUT_LONG", "3600"))
 # Default 2h — NAS upgrades often exceed 1h; killing the process corrupts dpkg.
 HOST_OMV_UPGRADE_TIMEOUT = int(os.getenv("HOST_OMV_UPGRADE_TIMEOUT", "7200"))
 
+# OpenMediaVault CLI RPC (`omv-rpc` on the NAS host). Used read-only for richer storage/SMART views.
+OMV_RPC_USER = os.getenv("OMV_RPC_USER", "admin").strip() or "admin"
+OMV_RPC_ENABLED = _env_bool("OMV_RPC_ENABLED", True)
+
 MAINTENANCE_ALLOWED_USER_IDS = [
     int(x.strip())
     for x in os.getenv("MAINTENANCE_ALLOWED_USER_IDS", "").split(",")

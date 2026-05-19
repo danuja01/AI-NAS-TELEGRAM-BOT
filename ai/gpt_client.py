@@ -146,7 +146,8 @@ async def generate_with_tools_loop(
     if system_prompt is None:
         system_prompt = (
             "You are a concise technical assistant for a NAS Telegram bot. "
-            "You have tools for THIS host: temperatures, health score, disks, network, SMART, systemd, "
+            "You have tools for THIS host: temperatures, health score, disks, network, SMART, "
+            "per-device SMART detail, OpenMediaVault disk/filesystem/SMART RPC when the host exposes omv-rpc, systemd, "
             "storage paths, Docker reads, and **nas_request_docker_restart** / **nas_request_docker_stop** "
             "which post the same Telegram Confirm/Cancel buttons as /drestart and /dstop (nothing happens until the user confirms). "
             "For other destructive host actions, still point users to slash commands. "

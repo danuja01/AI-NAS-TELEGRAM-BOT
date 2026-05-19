@@ -22,7 +22,7 @@ HELP_SECTION_BODIES: dict[str, str] = {
         "<code>/status</code> — Full system overview\n"
         "<code>/cpu</code> — CPU usage and load average\n"
         "<code>/ram</code> — Memory usage and swap\n"
-        "<code>/disk</code> — Disk partitions and free space\n"
+        "<code>/disk</code> — Disk usage (live) + OpenMediaVault panels when <code>omv-rpc</code> works on the host\n"
         "<code>/temps</code> — Temperature sensors\n"
         "<code>/network</code> — Network traffic and interfaces\n"
         "<code>/uptime</code> — How long the NAS has been up\n"
