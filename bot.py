@@ -65,6 +65,8 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("smart", "Drive SMART"),
     BotCommand("drives", "Same as SMART"),
     BotCommand("hdddetail", "HDD SMART + spin history"),
+    BotCommand("docker", "Docker container list"),
+    BotCommand("containers", "Docker container list"),
     BotCommand("ddocker", "Docker dashboard"),
     BotCommand("dscan", "Docker storage scan"),
     BotCommand("dclean", "Safe Docker cleanup"),

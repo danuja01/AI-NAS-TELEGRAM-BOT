@@ -15,6 +15,7 @@ from utils.followup_state import (
     FOLLOWUP_DOCKER_DSTART,
     FOLLOWUP_DOCKER_LOGS,
 )
+from utils.telegram_reply import reply_text_chunked
 from services.docker_service import (
     list_containers,
     restart_container,
@@ -58,19 +59,42 @@ async def _legacy_redirect(update: Update, new_cmd: str):
     )
 
 
+async def list_docker_containers_view(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    command_tag: str,
+) -> None:
+    """Classic container listing (shared by /docker and /containers)."""
+    user_id = update.effective_user.id
+    await update.message.reply_text("🐳 Listing Docker containers…")
+    try:
+        containers = list_containers(all_containers=True)
+        if not containers:
+            await update.message.reply_text(
+                "📭 No containers returned. Is Docker running and the socket mounted?"
+            )
+            return
+        message = format_docker_containers(containers)
+        await reply_text_chunked(update, message, parse_mode="Markdown")
+        await save_command(user_id, command_tag, f"{len(containers)} containers")
+    except Exception as e:
+        logger.exception("list_docker_containers_view (%s)", command_tag)
+        await update.message.reply_text(format_error(f"Failed to list Docker containers: {e}"))
+
+
 @require_auth
 @rate_limit
 async def docker_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Alias: redirect to /ddocker dashboard."""
-    from commands.docker_storage_cmds import ddocker_command
-
-    await ddocker_command(update, context)
+    """List Docker containers. Use /ddocker for the storage dashboard."""
+    await list_docker_containers_view(update, context, command_tag="/docker")
 
 
 @require_auth
 @rate_limit
 async def containers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await docker_command(update, context)
+    """Same listing as /docker (legacy alias)."""
+    await list_docker_containers_view(update, context, command_tag="/containers")
 
 
 @require_auth

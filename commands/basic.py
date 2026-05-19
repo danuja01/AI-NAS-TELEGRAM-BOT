@@ -71,7 +71,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/hdddetail` - HDD details: power/spin counters, hdparm state, sample history
 
 **🐳 Docker & storage**
-`/ddocker` - Docker dashboard
+`/docker` — List Docker containers (CPU/RAM where available)
+`/containers` — Same as `/docker`
+`/ddocker` — Docker dashboard (system df + service state)
 `/dscan` - Full Docker + disk scan
 `/dclean` - Safe cleanup (confirm)
 `/dprune` - Quick dangling prune
@@ -81,7 +83,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `/dlogs` - Huge log files
 `/dhealth` - NAS + Docker health report
 `/dstart` / `/drestart` / `/dstop` / `/dtail` - Container control
-`/docker` - Alias for `/ddocker`
 
 **📁 File System**
 `/files` - Browse default document path
