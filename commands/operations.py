@@ -118,8 +118,13 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await reply_text_safe(
         update,
         "⚠️ <b>Host upgrade</b>\n\n"
-        "This runs <code>omv-upgrade</code> on the NAS host (can take a long time, "
-        "may restart services). Confirm only during a maintenance window.",
+        "This runs <code>omv-upgrade</code> on the NAS host. It often takes <b>well over one hour</b> "
+        "(kernel/OMV/Docker). Do not use OMV Workbench <b>Apply</b> or other apt/salt jobs until "
+        "this bot sends the completion message.\n\n"
+        "If a previous run <b>timed out</b>, the host may need "
+        "<code>sudo dpkg --configure -a</code> before trying again.\n\n"
+        "Timeout is controlled by <code>HOST_OMV_UPGRADE_TIMEOUT</code> (default 7200s); "
+        "set <code>0</code> for no limit. Confirm only during a maintenance window.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         **_kw(),
     )
@@ -150,7 +155,8 @@ async def handle_operations_callback(update: Update, context: ContextTypes.DEFAU
 
     await query.edit_message_text(
         "⏳ <b>omv-upgrade started</b>\n\n"
-        "Running on host in background… you will get another message when it finishes.",
+        "Running on the host (this can take 1–2+ hours). You will get another message when it finishes "
+        "or if it times out. Avoid OMV Apply until then.",
         parse_mode=ParseMode.HTML,
     )
 

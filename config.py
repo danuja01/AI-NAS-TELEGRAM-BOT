@@ -125,6 +125,9 @@ HOST_SSH_EXTRA_ARGS = [
 ]
 HOST_EXEC_TIMEOUT_SHORT = int(os.getenv("HOST_EXEC_TIMEOUT_SHORT", "300"))
 HOST_EXEC_TIMEOUT_LONG = int(os.getenv("HOST_EXEC_TIMEOUT_LONG", "3600"))
+# omv-upgrade only: seconds for subprocess wait, or 0 = no timeout (can run many hours).
+# Default 2h — NAS upgrades often exceed 1h; killing the process corrupts dpkg.
+HOST_OMV_UPGRADE_TIMEOUT = int(os.getenv("HOST_OMV_UPGRADE_TIMEOUT", "7200"))
 
 MAINTENANCE_ALLOWED_USER_IDS = [
     int(x.strip())

@@ -32,6 +32,8 @@ services:
       - HOST_SSH_EXTRA_ARGS=${HOST_SSH_EXTRA_ARGS:-}
       - HOST_EXEC_TIMEOUT_SHORT=${HOST_EXEC_TIMEOUT_SHORT:-300}
       - HOST_EXEC_TIMEOUT_LONG=${HOST_EXEC_TIMEOUT_LONG:-3600}
+      # Seconds to wait for Telegram-triggered omv-upgrade (0 = no limit). Default 7200 avoids killing dpkg mid-run.
+      - HOST_OMV_UPGRADE_TIMEOUT=${HOST_OMV_UPGRADE_TIMEOUT:-7200}
       - MAINTENANCE_ALLOWED_USER_IDS=${MAINTENANCE_ALLOWED_USER_IDS:-}
       - MONITOR_SYSTEMD_UNITS=${MONITOR_SYSTEMD_UNITS:-docker,smbd,nginx}
       - JOURNAL_TAIL_LINES=${JOURNAL_TAIL_LINES:-20}

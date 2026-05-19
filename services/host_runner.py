@@ -111,7 +111,8 @@ def run_profile(
             "elif [ -x /usr/sbin/omv-upgrade ]; then exec /usr/sbin/omv-upgrade; "
             "else echo 'omv-upgrade not found' >&2; exit 127; fi",
         ]
-        to = config.HOST_EXEC_TIMEOUT_LONG
+        raw_to = config.HOST_OMV_UPGRADE_TIMEOUT
+        to = None if raw_to <= 0 else raw_to
     elif profile == "systemctl_is_active":
         if len(extra_args) != 1 or not _validate_unit(extra_args[0]):
             return HostExecResult(
@@ -139,7 +140,12 @@ def run_profile(
         run_env = os.environ.copy()
         run_env.update(env)
 
-    logger.info("host_runner profile=%s argv0=%s", profile, argv[0] if argv else None)
+    logger.info(
+        "host_runner profile=%s argv0=%s timeout=%s",
+        profile,
+        argv[0] if argv else None,
+        "none" if to is None else str(to),
+    )
     try:
         proc = subprocess.run(
             argv,
@@ -155,12 +161,27 @@ def run_profile(
             _truncate(proc.stderr or "", limit=4000),
         )
     except subprocess.TimeoutExpired as e:
+        out_dec = e.stdout if isinstance(e.stdout, str) else (
+            e.stdout.decode(errors="replace") if e.stdout else ""
+        )
+        err_dec = e.stderr if isinstance(e.stderr, str) else (
+            e.stderr.decode(errors="replace") if e.stderr else ""
+        )
+        display_to = "unlimited" if to is None else f"{to}s"
+        err_msg = f"Timeout (limit {display_to}) for profile {profile}"
+        if profile == "omv_upgrade":
+            err_msg += (
+                ". The subprocess was killed; the host may have incomplete dpkg. "
+                "On the NAS run: sudo dpkg --configure -a && sudo apt --fix-broken install. "
+                "Avoid OMV Workbench Apply until that succeeds. "
+                "Set HOST_OMV_UPGRADE_TIMEOUT higher or to 0 (no limit) in .env."
+            )
         return HostExecResult(
             profile,
             -1,
-            _truncate(e.stdout.decode() if e.stdout else ""),
-            _truncate(e.stderr.decode() if e.stderr else ""),
-            error=f"Timeout (>{to}s) for profile {profile}",
+            _truncate(out_dec),
+            _truncate(err_dec, limit=4000),
+            error=err_msg,
         )
     except Exception as e:
         logger.exception("host_runner failed")
