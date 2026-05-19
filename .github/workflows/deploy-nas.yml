@@ -1,0 +1,85 @@
+# Deploy to your NAS over Tailscale (GitHub runner joins your tailnet → SSH → docker compose).
+#
+# Pipeline: smoke Docker build must succeed before deploy runs (`needs: smoke`).
+#
+# Who can trigger deploy?
+# - push to `main` only (no pull_request — avoids fork PRs running deploy).
+# - `if: github.actor == github.repository_owner` — personal repos: only the owner account.
+#   Organization-owned repos: replace with an explicit actor allowlist on the `deploy` job if needed.
+#
+# GitHub secrets (repo Settings → Secrets and variables → Actions)
+# ------------------------------------------------------------------------------
+# Tailscale — ONE of:
+#   • TAILSCALE_AUTHKEY — preauth key from Tailscale admin (ephemeral or tagged reusable).
+#     https://login.tailscale.com/admin/settings/keys
+#   • OR use OAuth (recommended for teams): set TS_OAUTH_CLIENT_ID + TS_OAUTH_SECRET,
+#     uncomment the oauth inputs below, and comment out authkey. Tags on the OAuth
+#     client must match `tags` in the action. See:
+#     https://tailscale.com/kb/1276/tailscale-github-action/
+#
+# SSH + paths:
+#   NAS_SSH_PRIVATE_KEY — PEM private key (dedicated deploy key, not your daily key)
+#   NAS_HOST            — MagicDNS hostname or 100.x tailnet IP
+#   NAS_USER            — SSH login (prefer user in `docker` group, not root)
+#   NAS_PROJECT_PATH    — directory on NAS with compose + git clone, e.g. /home/you/bot
+#
+# NAS must allow non-interactive:
+#   cd NAS_PROJECT_PATH && git pull --ff-only && docker compose up -d --build
+
+name: Deploy to NAS (Tailscale + SSH)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-nas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Docker smoke build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build the Docker image
+        run: |
+          docker build . \
+            --file Dockerfile \
+            --tag nas-telegram-bot:${{ github.event_name }}-${{ github.sha }}
+
+  deploy:
+    name: Deploy via Tailscale + SSH
+    runs-on: ubuntu-latest
+    needs: smoke
+    if: github.actor == github.repository_owner
+
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          version: latest
+          # OAuth (comment out authkey above when using this):
+          # oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          # oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          # tags: tag:ci
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.NAS_SSH_PRIVATE_KEY }}
+
+      - name: Deploy on NAS
+        env:
+          NAS_HOST: ${{ secrets.NAS_HOST }}
+          NAS_USER: ${{ secrets.NAS_USER }}
+          NAS_PROJECT_PATH: ${{ secrets.NAS_PROJECT_PATH }}
+        run: |
+          set -euo pipefail
+          test -n "${NAS_HOST:-}" && test -n "${NAS_USER:-}" && test -n "${NAS_PROJECT_PATH:-}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            "${NAS_USER}@${NAS_HOST}" \
+            "set -euo pipefail; cd '${NAS_PROJECT_PATH}' && git pull --ff-only && docker compose up -d --build"

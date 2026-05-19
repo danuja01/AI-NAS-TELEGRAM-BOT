@@ -1,9 +1,8 @@
-# Smoke-test Docker build on every push and on PRs whose base branch is main.
-# Repo root is the bot project (Dockerfile at top level).
+# Smoke-test Docker build on pull requests to main.
+# Pushes to `main` run the same build inside "Deploy to NAS" (smoke job) before deploy.
 name: Docker Image CI
 
 on:
-  push:
   pull_request:
     branches: [main]
 
@@ -11,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build the Docker image
         run: |
