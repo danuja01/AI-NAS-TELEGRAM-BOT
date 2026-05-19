@@ -11,7 +11,9 @@ from utils.security import require_auth, rate_limit
 from utils.formatters import format_error, format_success, format_ai_response
 from utils.telegram_reply import reply_text_chunked
 from ai.rag_engine import ask, index_documents, is_rag_ready, get_index_stats
-from ai.gpt_client import generate, generate_with_thinking, summarize_text
+import config
+from ai.bot_command_catalog import BOT_COMMAND_CATALOG
+from ai.gpt_client import generate_with_thinking, generate_with_tools_loop, summarize_text
 from ai.search_engine import search_web, is_search_available
 from ai.conversation_history import ConversationManager
 from database.memory import save_conversation, save_command
@@ -99,17 +101,28 @@ async def execute_ask(update: Update, context: ContextTypes.DEFAULT_TYPE, user_i
 
 async def execute_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, message: str):
     try:
-        await update.message.reply_text("💬 Thinking...")
+        await update.message.reply_text("💬 Thinking (may query Docker/host)...")
 
         conv_context = await ConversationManager.format_for_rag(user_id, limit=5)
+        full_ctx_parts = [f"## Bot command reference\n{BOT_COMMAND_CATALOG}"]
+        if conv_context.strip():
+            full_ctx_parts.append(f"## Recent conversation\n{conv_context}")
+        full_ctx = "\n\n".join(full_ctx_parts)
 
-        response = await generate(
+        response = await generate_with_tools_loop(
             prompt=message,
-            context=conv_context,
+            context=full_ctx,
             system_prompt=(
-                "You are a helpful DevOps and NAS management assistant. "
-                "Provide clear, practical advice."
+                "You are a DevOps and NAS assistant running inside a Telegram bot. "
+                "You have tools to read live Docker containers, container logs, and quick system metrics. "
+                "Use tools whenever the user asks for current facts; never fabricate container lists or usage. "
+                "For actions that change state (restart/stop/prune/reboot), tell the user the exact slash "
+                "command from the reference (they require confirmations in Telegram). "
+                "Reply in clear Markdown suitable for Telegram."
             ),
+            model=config.DEFAULT_MODEL,
+            temperature=0.5,
+            max_tokens=3500,
         )
 
         formatted_response = format_ai_response(response)
@@ -186,11 +199,45 @@ async def execute_explain(update: Update, context: ContextTypes.DEFAULT_TYPE, us
 
 async def execute_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, text: str):
     try:
-        await update.message.reply_text("🧠 Analyzing with advanced reasoning (o3)...")
+        await update.message.reply_text("🧠 Analyzing (may query Docker/host)...")
 
         conv_context = await ConversationManager.format_for_rag(user_id, limit=5)
+        full_ctx_parts = [f"## Bot command reference\n{BOT_COMMAND_CATALOG}"]
+        if conv_context.strip():
+            full_ctx_parts.append(f"## Recent conversation\n{conv_context}")
+        full_ctx = "\n\n".join(full_ctx_parts)
 
-        analysis = await generate_with_thinking(prompt=text, context=conv_context)
+        analyze_system = (
+            "You are an expert technical assistant with deep reasoning. "
+            "You may call read-only tools to gather live Docker or system data before concluding. "
+            "Use tools when the answer depends on current machine state. "
+            "For destructive actions, only reference the appropriate slash command from the reference. "
+            "Respond in thorough Markdown suitable for Telegram."
+        )
+
+        try:
+            analysis = await generate_with_tools_loop(
+                prompt=text,
+                context=full_ctx,
+                system_prompt=analyze_system,
+                model=config.THINKING_MODEL,
+                temperature=0.5,
+                max_tokens=4500,
+            )
+        except Exception as e1:
+            logger.warning("analyze with thinking model + tools failed (%s); retry default model", e1)
+            try:
+                analysis = await generate_with_tools_loop(
+                    prompt=text,
+                    context=full_ctx,
+                    system_prompt=analyze_system,
+                    model=config.DEFAULT_MODEL,
+                    temperature=0.5,
+                    max_tokens=4000,
+                )
+            except Exception as e2:
+                logger.warning("analyze with default model + tools failed (%s); fallback without tools", e2)
+                analysis = await generate_with_thinking(prompt=text, context=full_ctx)
 
         formatted_analysis = format_ai_response(analysis)
         await reply_text_chunked(

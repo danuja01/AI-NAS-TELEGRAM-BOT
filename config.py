@@ -57,6 +57,8 @@ ROOT_PASSWORD = os.getenv("ROOT_PASSWORD", "")
 
 # Conversation Settings
 CONVERSATION_HISTORY_LENGTH = int(os.getenv("CONVERSATION_HISTORY_LENGTH", "10"))
+# Max assistant↔tool round-trips for /chat, /analyze, and RAG /ask agent mode
+AGENT_MAX_TOOL_ROUNDS = int(os.getenv("AGENT_MAX_TOOL_ROUNDS", "12"))
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -177,6 +179,7 @@ STORAGE_SCAN_PATHS = [
     if p.strip()
 ]
 
+
 # Validation
 def validate_config():
     """Validate required configuration."""
@@ -193,6 +196,7 @@ def validate_config():
     
     if errors:
         raise ValueError(f"Configuration errors: {', '.join(errors)}")
+
 
 # Validate on import (skipped for CI/local import-only smoke tests)
 if os.getenv("SMOKE_IMPORT_ONLY", "").strip().lower() not in ("1", "true", "yes"):

@@ -3,11 +3,15 @@ OpenAI GPT client for AI tasks.
 Primary AI engine using gpt-5.4-nano, gpt-5.4-mini, and o3.
 """
 
+import asyncio
+import json
 import logging
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
+
 from openai import AsyncOpenAI
 
 import config
+from ai.nas_agent_tools import NAS_AGENT_TOOLS, run_nas_tool
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +124,99 @@ async def generate(
                 logger.error(f"Fallback model also failed: {fallback_error}")
         
         raise
+
+
+async def generate_with_tools_loop(
+    prompt: str,
+    context: str = "",
+    system_prompt: str | None = None,
+    model: str | None = None,
+    temperature: float = 0.5,
+    max_tokens: int = 3500,
+    max_tool_rounds: int | None = None,
+) -> str:
+    """
+    Chat completion with read-only NAS/Docker tools (function calling).
+
+    Loops until the model returns a normal message or ``max_tool_rounds`` is exceeded.
+    """
+    if model is None:
+        model = config.DEFAULT_MODEL
+    if system_prompt is None:
+        system_prompt = (
+            "You are a concise technical assistant for a NAS Telegram bot. "
+            "Use the provided tools whenever the user needs live facts about Docker or system resources. "
+            "Never guess container names or metrics. After tool results, summarize in Telegram-friendly Markdown."
+        )
+    rounds_limit = (
+        max_tool_rounds if max_tool_rounds is not None else config.AGENT_MAX_TOOL_ROUNDS
+    )
+
+    messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+    if context:
+        messages.append({"role": "system", "content": f"Context:\n{context}"})
+    messages.append({"role": "user", "content": prompt})
+
+    client = get_openai_client()
+
+    for _ in range(rounds_limit):
+        create_kwargs: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "tools": NAS_AGENT_TOOLS,
+            "tool_choice": "auto",
+            "max_completion_tokens": max_tokens,
+        }
+        if not _model_ignores_temperature(model):
+            create_kwargs["temperature"] = temperature
+
+        response = await client.chat.completions.create(**create_kwargs)
+        msg = response.choices[0].message
+
+        if msg.tool_calls:
+            assistant_msg: Dict[str, Any] = {
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": [],
+            }
+            for tc in msg.tool_calls:
+                assistant_msg["tool_calls"].append(
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments or "{}",
+                        },
+                    }
+                )
+            messages.append(assistant_msg)
+
+            for tc in msg.tool_calls:
+                fn = tc.function
+                try:
+                    args = json.loads(fn.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                result = await asyncio.to_thread(run_nas_tool, fn.name, args)
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result,
+                    }
+                )
+            continue
+
+        text = msg.content
+        if text:
+            return text
+        return "(No text in model response.)"
+
+    return (
+        "Stopped: reached the maximum number of tool rounds without a final answer. "
+        "Try a narrower question or raise AGENT_MAX_TOOL_ROUNDS in the environment."
+    )
 
 
 async def generate_with_thinking(

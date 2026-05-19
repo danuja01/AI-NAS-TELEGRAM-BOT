@@ -16,9 +16,10 @@ except ImportError:
     logging.warning("chromadb not available")
 
 import config
+from ai.bot_command_catalog import BOT_COMMAND_CATALOG
 from ai.document_loader import load_directory, chunk_text
 from ai.embeddings import embed_text, embed_batch, is_embeddings_available
-from ai.gpt_client import generate, generate_with_thinking
+from ai.gpt_client import generate_with_thinking, generate_with_tools_loop
 from ai.conversation_history import ConversationManager
 from ai.search_engine import get_search_context, is_search_available
 
@@ -254,6 +255,7 @@ async def ask(
         
         # Combine all context
         full_context = ""
+        full_context += f"## Bot commands (always available)\n{BOT_COMMAND_CATALOG}\n\n"
         if conv_context:
             full_context += f"{conv_context}\n\n"
         if doc_context:
@@ -261,21 +263,26 @@ async def ask(
         if web_context:
             full_context += f"{web_context}\n\n"
         
-        # Generate answer
+        rag_system = (
+            "You are a helpful AI assistant for a NAS Telegram bot. Answer using the provided context. "
+            "The command reference describes what users can type in Telegram. "
+            "If the context does not contain the answer, say so. Be concise and accurate."
+        )
+
+        # Generate answer (read-only tools when not using a pure reasoning-only path)
         if use_thinking:
             answer = await generate_with_thinking(
                 prompt=question,
                 context=full_context
             )
         else:
-            answer = await generate(
+            answer = await generate_with_tools_loop(
                 prompt=question,
                 context=full_context,
-                system_prompt=(
-                    "You are a helpful AI assistant. Answer the user's question "
-                    "using the provided context. If the context doesn't contain "
-                    "the answer, say so. Be concise and accurate."
-                )
+                system_prompt=rag_system,
+                model=config.DEFAULT_MODEL,
+                temperature=0.4,
+                max_tokens=3500,
             )
         
         return answer
