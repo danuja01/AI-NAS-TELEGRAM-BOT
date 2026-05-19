@@ -22,13 +22,10 @@ def _h(value: Any) -> str:
 
 def format_ai_response(text: str) -> str:
     """
-    Format AI response for Telegram by converting markdown to Telegram-friendly format.
-    
-    Args:
-        text: Raw AI response with markdown
-    
-    Returns:
-        Cleaned text formatted for Telegram
+    Light cleanup for legacy Markdown replies.
+
+    Prefer ``utils.telegram_reply.reply_ai_markdown_chunked`` for AI output; it uses
+    ``telegramify-markdown`` (MarkdownV2) and handles tables and entity escaping.
     """
     if not text:
         return text

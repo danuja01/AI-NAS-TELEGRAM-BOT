@@ -3,7 +3,6 @@ OpenAI GPT client for AI tasks.
 Primary AI engine using gpt-5.4-nano, gpt-5.4-mini, and o3.
 """
 
-import asyncio
 import json
 import logging
 from typing import List, Dict, Any
@@ -11,7 +10,8 @@ from typing import List, Dict, Any
 from openai import AsyncOpenAI
 
 import config
-from ai.nas_agent_tools import NAS_AGENT_TOOLS, run_nas_tool
+from ai.agent_telegram import AgentTelegramBindings
+from ai.nas_agent_tools import NAS_AGENT_TOOLS, dispatch_nas_agent_tool
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +134,7 @@ async def generate_with_tools_loop(
     temperature: float = 0.5,
     max_tokens: int = 3500,
     max_tool_rounds: int | None = None,
+    telegram_bindings: AgentTelegramBindings | None = None,
 ) -> str:
     """
     Chat completion with read-only NAS/Docker tools (function calling).
@@ -145,13 +146,12 @@ async def generate_with_tools_loop(
     if system_prompt is None:
         system_prompt = (
             "You are a concise technical assistant for a NAS Telegram bot. "
-            "You have read-only tools for THIS host: temperatures (/temps-class data), health score, disks, "
-            "network counters, SMART drives, systemd services, configured storage paths, and Docker reads. "
-            "Whenever the user asks about their own machine (temperatures normal?, CPU, RAM, disks, drives, "
-            "containers, services), you MUST call the relevant tool(s) first and base your answer on the returned "
-            "numbers — never substitute generic industry ranges as the final answer without tool data. "
-            "After tools return, interpret briefly in Telegram Markdown. "
-            "For mutating actions, only point to the appropriate slash command."
+            "You have tools for THIS host: temperatures, health score, disks, network, SMART, systemd, "
+            "storage paths, Docker reads, and **nas_request_docker_restart** / **nas_request_docker_stop** "
+            "which post the same Telegram Confirm/Cancel buttons as /drestart and /dstop (nothing happens until the user confirms). "
+            "For other destructive host actions, still point users to slash commands. "
+            "Never use markdown pipe tables; use short bullet lists. "
+            "Whenever the user asks about their own machine, call tools first; do not invent metrics."
         )
     rounds_limit = (
         max_tool_rounds if max_tool_rounds is not None else config.AGENT_MAX_TOOL_ROUNDS
@@ -203,7 +203,7 @@ async def generate_with_tools_loop(
                     args = json.loads(fn.arguments or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                result = await asyncio.to_thread(run_nas_tool, fn.name, args)
+                result = await dispatch_nas_agent_tool(fn.name, args, telegram_bindings)
                 messages.append(
                     {
                         "role": "tool",

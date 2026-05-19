@@ -16,6 +16,7 @@ except ImportError:
     logging.warning("chromadb not available")
 
 import config
+from ai.agent_telegram import AgentTelegramBindings
 from ai.bot_command_catalog import BOT_COMMAND_CATALOG
 from ai.document_loader import load_directory, chunk_text
 from ai.embeddings import embed_text, embed_batch, is_embeddings_available
@@ -215,7 +216,8 @@ async def ask(
     question: str,
     user_id: int,
     use_thinking: bool = False,
-    search_web: bool = False
+    search_web: bool = False,
+    telegram_bindings: AgentTelegramBindings | None = None,
 ) -> str:
     """
     Answer a question using RAG with conversation context.
@@ -225,6 +227,7 @@ async def ask(
         user_id: Telegram user ID (for conversation history)
         use_thinking: Use o3-mini for complex reasoning
         search_web: Include web search results
+        telegram_bindings: When set (normal Telegram handler), agent tools can post Docker confirm UIs.
     
     Returns:
         Generated answer
@@ -267,6 +270,9 @@ async def ask(
             "You are a helpful AI assistant for a NAS Telegram bot. Answer using the provided context. "
             "The command reference describes what users can type in Telegram. "
             "You have tools to read live data from this host (temperatures, disks, SMART, Docker, etc.). "
+            "You may call **nas_request_docker_restart** or **nas_request_docker_stop** to post the same inline "
+            "Confirm/Cancel prompts as /drestart and /dstop; nothing runs until the user confirms. "
+            "Do not use markdown pipe tables in replies; use bullet lists. "
             "If the question is about the user's own NAS state, call tools first; do not invent readings. "
             "If the context does not contain the answer, say so. Be concise and accurate."
         )
@@ -285,6 +291,7 @@ async def ask(
                 model=config.DEFAULT_MODEL,
                 temperature=0.4,
                 max_tokens=3500,
+                telegram_bindings=telegram_bindings,
             )
         
         return answer
