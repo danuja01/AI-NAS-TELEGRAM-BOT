@@ -11,8 +11,31 @@ import config
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client
-client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
+_client: AsyncOpenAI | None = None
+
+
+def get_openai_client() -> AsyncOpenAI:
+    """
+    Lazily construct the AsyncOpenAI client.
+
+    Creating AsyncOpenAI with a missing api_key raises at construction time on current SDKs,
+    which would break import-only smoke tests. Normal bot startup still requires a key via
+    config.validate_config().
+    """
+    global _client
+    if _client is None:
+        key = config.OPENAI_API_KEY
+        if not key:
+            raise ValueError("OPENAI_API_KEY is required for AI operations")
+        _client = AsyncOpenAI(api_key=key)
+    return _client
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy `client` attribute for callers that reference `gpt_client.client`."""
+    if name == "client":
+        return get_openai_client()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _model_ignores_temperature(model: str) -> bool:
@@ -76,7 +99,7 @@ async def generate(
         }
         if not _model_ignores_temperature(model):
             create_kwargs["temperature"] = temperature
-        response = await client.chat.completions.create(**create_kwargs)
+        response = await get_openai_client().chat.completions.create(**create_kwargs)
         
         return response.choices[0].message.content
     
@@ -175,7 +198,7 @@ async def generate_stream(
         }
         if not _model_ignores_temperature(model):
             stream_kwargs["temperature"] = 0.7
-        stream = await client.chat.completions.create(**stream_kwargs)
+        stream = await get_openai_client().chat.completions.create(**stream_kwargs)
         
         async for chunk in stream:
             if chunk.choices[0].delta.content:
