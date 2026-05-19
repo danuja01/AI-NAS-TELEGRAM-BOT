@@ -14,12 +14,6 @@ OMV_RPC_CALLS: Dict[str, Tuple[str, str, Optional[str]]] = {
     "disk_enumerate": ("DiskMgmt", "enumerateDevices", None),
     "filesystem_mounted": ("FileSystemMgmt", "enumerateMountedFilesystems", '{"includeroot": true}'),
     "smart_enumerate": ("Smart", "enumerateDevices", None),
-    "smart_list": (
-        "Smart",
-        "getList",
-        '{"start":0,"limit":9999,"sortfield":"devicename","sortdir":"ASC"}',
-    ),
-    "raid_candidates": ("RaidMgmt", "getCandidates", None),
 }
 
 

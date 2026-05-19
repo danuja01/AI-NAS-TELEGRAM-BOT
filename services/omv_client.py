@@ -88,22 +88,6 @@ async def fetch_smart_devices() -> Tuple[List[Dict[str, Any]], Optional[str]]:
     return _unwrap_rows(data), None
 
 
-async def fetch_smart_list() -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    r = await omv_rpc_call("smart_list")
-    data, err = parse_omv_rpc_output(r)
-    if err:
-        return [], err
-    return _unwrap_rows(data), None
-
-
-async def fetch_raid_candidates() -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    r = await omv_rpc_call("raid_candidates")
-    data, err = parse_omv_rpc_output(r)
-    if err:
-        return [], err
-    return _unwrap_rows(data), None
-
-
 def sync_fetch_disk_enumerate() -> Tuple[List[Dict[str, Any]], Optional[str]]:
     r = run_omv_rpc_sync("disk_enumerate")
     data, err = parse_omv_rpc_output(r)
@@ -122,22 +106,6 @@ def sync_fetch_filesystems_mounted() -> Tuple[List[Dict[str, Any]], Optional[str
 
 def sync_fetch_smart_devices() -> Tuple[List[Dict[str, Any]], Optional[str]]:
     r = run_omv_rpc_sync("smart_enumerate")
-    data, err = parse_omv_rpc_output(r)
-    if err:
-        return [], err
-    return _unwrap_rows(data), None
-
-
-def sync_fetch_smart_list() -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    r = run_omv_rpc_sync("smart_list")
-    data, err = parse_omv_rpc_output(r)
-    if err:
-        return [], err
-    return _unwrap_rows(data), None
-
-
-def sync_fetch_raid_candidates() -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    r = run_omv_rpc_sync("raid_candidates")
     data, err = parse_omv_rpc_output(r)
     if err:
         return [], err
