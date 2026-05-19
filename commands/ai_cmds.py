@@ -127,6 +127,12 @@ async def execute_chat(
         full_ctx = "\n\n".join(full_ctx_parts)
 
         bind = AgentTelegramBindings(update, context, user_id)
+        _ro_chat = ""
+        if config.AGENT_HOST_READONLY_TOOL:
+            _ro_chat = (
+                "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** runs allow-listed read-only "
+                "host diagnostics over SSH/nsenter (not arbitrary shell) and **does not** replace **`/ssh`**. "
+            )
         response = await generate_with_tools_loop(
             prompt=message,
             context=full_ctx,
@@ -137,7 +143,8 @@ async def execute_chat(
                 "(when the bot reaches the OMV host), systemd services, storage paths from config, Docker reads, "
                 "and **nas_request_docker_restart** / **nas_request_docker_stop** which post the same inline "
                 "Confirm/Cancel UI as /drestart and /dstop (nothing happens until the user taps Confirm). "
-                "Whenever the user asks about their own machine, call read tools first and answer from data. "
+                + _ro_chat
+                + "Whenever the user asks about their own machine, call read tools first and answer from data. "
                 "For container restart/stop requests, use the request_* tools after the user names the container. "
                 "Never use markdown pipe tables; use bullet lists with bold names. "
                 "For other destructive host actions, point to the exact slash command."
@@ -248,13 +255,20 @@ async def execute_analyze(
 
         bind = AgentTelegramBindings(update, context, user_id)
 
+        _ro_analyze = ""
+        if config.AGENT_HOST_READONLY_TOOL:
+            _ro_analyze = (
+                "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** is allow-listed read-only host "
+                "diagnostics via SSH/nsenter (not arbitrary shell); it **does not** replace **`/ssh`**. "
+            )
         analyze_system = (
             "You are an expert technical assistant with deep reasoning. "
             "You have tools for THIS host: temperature sensors, health score, disk partitions, network, "
             "SMART drives, per-device SMART detail, OpenMediaVault disk/filesystem/SMART views when RPC is available, "
             "systemd services, configured storage paths, Docker list/logs/unhealthy, snapshot, "
             "and **nas_request_docker_restart** / **nas_request_docker_stop** (same inline Confirm/Cancel as /drestart /dstop). "
-            "For questions about this NAS, call tools first and reason from the data. "
+            + _ro_analyze
+            + "For questions about this NAS, call tools first and reason from the data. "
             "Never use markdown pipe tables; use bullet lists with bold names."
         )
 

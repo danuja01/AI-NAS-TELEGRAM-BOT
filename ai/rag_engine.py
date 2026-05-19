@@ -266,13 +266,20 @@ async def ask(
         if web_context:
             full_context += f"{web_context}\n\n"
         
+        rag_ro = ""
+        if config.AGENT_HOST_READONLY_TOOL:
+            rag_ro = (
+                "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** may appear: allow-listed read-only "
+                "host diagnostics over SSH/nsenter (not arbitrary shell); it **does not** replace **`/ssh`**. "
+            )
         rag_system = (
             "You are a helpful AI assistant for a NAS Telegram bot. Answer using the provided context. "
             "The command reference describes what users can type in Telegram. "
             "You have tools to read live data from this host (temperatures, disks, SMART, Docker, OpenMediaVault RPC when available, etc.). "
             "You may call **nas_request_docker_restart** or **nas_request_docker_stop** to post the same inline "
             "Confirm/Cancel prompts as /drestart and /dstop; nothing runs until the user confirms. "
-            "Do not use markdown pipe tables in replies; use bullet lists. "
+            + rag_ro
+            + "Do not use markdown pipe tables in replies; use bullet lists. "
             "If the question is about the user's own NAS state, call tools first; do not invent readings. "
             "If the context does not contain the answer, say so. Be concise and accurate."
         )

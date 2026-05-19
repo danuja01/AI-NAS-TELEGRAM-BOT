@@ -1,6 +1,7 @@
 """
-NAS agent tools for OpenAI function calling: host metrics, Docker reads, and
-interactive Docker restart/stop (Telegram confirmation only — same as /drestart /dstop).
+NAS agent tools for OpenAI function calling: host metrics, Docker reads,
+optional allow-listed read-only host profiles (SSH/nsenter via host_runner),
+and interactive Docker restart/stop (Telegram confirmation only — same as /drestart /dstop).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from services import docker_service as ds
 from services.file_service import get_storage_summary
 from services.service_manager import list_common_services
 from services.smart_monitor import check_drive_warnings, get_all_drives, get_smart_data
+from services.host_runner import run_profile as host_run_profile
 from services.omv_client import (
     omv_disk_summary_json,
     omv_filesystems_summary_json,
@@ -47,6 +49,18 @@ _SMART_DEVICE_RE = re.compile(
 _MAX_SERVICES = 45
 _MAX_SMART_DRIVES = 12
 
+_HOST_READONLY_PROFILES_ORDERED: List[str] = [
+    "apt_list_upgradable",
+    "reboot_required",
+    "systemctl_is_active",
+    "journal_tail",
+    "systemctl_failed",
+    "du_path",
+    "find_large_files",
+]
+
+_HOST_READONLY_PROFILES = frozenset(_HOST_READONLY_PROFILES_ORDERED)
+
 
 def _tool_entry(
     name: str,
@@ -68,8 +82,46 @@ def _tool_entry(
     }
 
 
-# OpenAI Chat Completions `tools`: host metrics, Docker reads, and interactive restart/stop prompts.
-NAS_AGENT_TOOLS: List[Dict[str, Any]] = [
+_NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
+    "nas_host_readonly_profile",
+    (
+        "Read-only host diagnostics on the OMV/NAS machine via SSH or nsenter (same pipeline as HOST_EXEC_MODE). "
+        "**Not** arbitrary shell — only fixed allowlisted profiles (apt list --upgradable, reboot-required banner, "
+        "systemctl is-active/journalctl tail for monitored units, systemctl --failed, du/find under STORAGE_SCAN_PATHS). "
+        "Requires AGENT_HOST_READONLY_TOOL=true at boot. Does **not** replace `/ssh` (root-session shell)."
+    ),
+    {
+        "profile": {
+            "type": "string",
+            "enum": list(_HOST_READONLY_PROFILES_ORDERED),
+            "description": "Predefined read-only operation; pick args below only when required for this profile.",
+        },
+        "unit": {
+            "type": "string",
+            "description": "systemd unit from bot MONITOR_SYSTEMD_UNITS; required for systemctl_is_active and journal_tail.",
+        },
+        "path": {
+            "type": "string",
+            "description": (
+                "Absolute path under STORAGE_SCAN_PATHS / bot scan roots; "
+                "required for du_path and find_large_files."
+            ),
+        },
+        "min_mb": {
+            "type": "integer",
+            "description": "Minimum file size in MiB for find_large_files (+N M); typical 100–1024.",
+        },
+        "max_n": {
+            "type": "integer",
+            "description": "Maximum file entries for find_large_files (optional, default from host_runner).",
+        },
+    },
+    required=["profile"],
+)
+
+
+# Base OpenAI Chat Completions `tools` (see get_nas_agent_tools() when AGENT_HOST_READONLY_TOOL is enabled).
+_NAS_AGENT_TOOLS_BASE: List[Dict[str, Any]] = [
     _tool_entry(
         "nas_temperature_sensors",
         (
@@ -209,6 +261,80 @@ NAS_AGENT_TOOLS: List[Dict[str, Any]] = [
         required=["container"],
     ),
 ]
+
+# Stable export: base tools only. Use ``get_nas_agent_tools()`` for the live tool list passed to OpenAI.
+NAS_AGENT_TOOLS = _NAS_AGENT_TOOLS_BASE
+
+
+def get_nas_agent_tools() -> List[Dict[str, Any]]:
+    """Tools for Chat Completions, including optional read-only host profile when configured."""
+    out = list(_NAS_AGENT_TOOLS_BASE)
+    if config.AGENT_HOST_READONLY_TOOL:
+        out.append(_NAS_HOST_READONLY_PROFILE_TOOL_ENTRY)
+    return out
+
+
+def _exec_host_readonly_profile(user_id: Optional[int], args: Dict[str, Any]) -> str:
+    """
+    Invoke host_runner.run_profile for AI-allowlisted profiles only (no shell from the model).
+    """
+    profile = str(args.get("profile", "")).strip()
+    if profile not in _HOST_READONLY_PROFILES:
+        return json.dumps({"ok": False, "error": f"disallowed profile: {profile!r}"})
+
+    extra: List[str] = []
+    if profile in ("systemctl_is_active", "journal_tail"):
+        unit = str(args.get("unit", "")).strip()
+        if not unit:
+            return json.dumps({"ok": False, "error": "parameter 'unit' is required for this profile"})
+        extra = [unit]
+    elif profile == "du_path":
+        path = str(args.get("path", "")).strip()
+        if not path:
+            return json.dumps({"ok": False, "error": "parameter 'path' is required for this profile"})
+        extra = [path]
+    elif profile == "find_large_files":
+        path = str(args.get("path", "")).strip()
+        if not path:
+            return json.dumps({"ok": False, "error": "parameter 'path' is required for this profile"})
+        min_mb = args.get("min_mb")
+        if min_mb is None:
+            return json.dumps({"ok": False, "error": "parameter 'min_mb' is required for find_large_files"})
+        try:
+            min_mb_int = int(min_mb)
+        except (TypeError, ValueError):
+            return json.dumps({"ok": False, "error": "min_mb must be an integer"})
+        row = [path, str(min_mb_int)]
+        max_n = args.get("max_n")
+        if max_n is not None:
+            try:
+                row.append(str(int(max_n)))
+            except (TypeError, ValueError):
+                return json.dumps({"ok": False, "error": "max_n must be an integer"})
+        extra = row
+    elif profile not in ("apt_list_upgradable", "reboot_required", "systemctl_failed"):
+        return json.dumps({"ok": False, "error": f"unsupported profile routing: {profile}"})
+
+    uid_label = user_id if user_id is not None else "?"
+    logger.warning(
+        "AGENT_HOST_READONLY_PROFILE user_id=%s profile=%s extra=%s",
+        uid_label,
+        profile,
+        extra,
+    )
+
+    result = host_run_profile(profile, extra_args=extra if extra else None)
+
+    payload: Dict[str, Any] = {
+        "ok": result.ok,
+        "profile": profile,
+        "exit_code": result.exit_code,
+        "stdout": result.stdout or "",
+        "stderr": result.stderr or "",
+    }
+    if result.error:
+        payload["error"] = result.error
+    return json.dumps(payload, default=str)
 
 
 def _validate_container_name(name: str) -> bool:
@@ -577,6 +703,14 @@ async def dispatch_nas_agent_tool(
     Run one agent tool. Interactive Docker tools require ``telegram_bind`` from a live chat handler.
     """
     args = arguments or {}
+    if function_name == "nas_host_readonly_profile":
+        if not config.AGENT_HOST_READONLY_TOOL:
+            return json.dumps(
+                {"ok": False, "error": "nas_host_readonly_profile is disabled (set AGENT_HOST_READONLY_TOOL=true)"}
+            )
+        uid = telegram_bind.user_id if telegram_bind else None
+        return await asyncio.to_thread(_exec_host_readonly_profile, uid, args)
+
     if function_name == "nas_request_docker_restart":
         if telegram_bind is None:
             return json.dumps(

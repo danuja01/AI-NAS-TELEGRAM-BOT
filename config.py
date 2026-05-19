@@ -68,6 +68,9 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
+# When True, expose nas_host_readonly_profile to /chat /analyze /ask agent (allowlisted host reads via host_runner).
+AGENT_HOST_READONLY_TOOL = _env_bool("AGENT_HOST_READONLY_TOOL", False)
+
 # After startup: re-index RAG documents and message ALLOWED_USER_IDS (good after new deploy).
 AUTO_INDEX_ON_START = _env_bool("AUTO_INDEX_ON_START", False)
 # If true, clears the Chroma collection first (slower; use if embedding model changed).

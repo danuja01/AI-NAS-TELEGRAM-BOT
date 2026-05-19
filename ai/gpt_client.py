@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 
 import config
 from ai.agent_telegram import AgentTelegramBindings
-from ai.nas_agent_tools import NAS_AGENT_TOOLS, dispatch_nas_agent_tool
+from ai.nas_agent_tools import get_nas_agent_tools, dispatch_nas_agent_tool
 
 logger = logging.getLogger(__name__)
 
@@ -144,13 +144,20 @@ async def generate_with_tools_loop(
     if model is None:
         model = config.DEFAULT_MODEL
     if system_prompt is None:
+        _ro_tools = ""
+        if config.AGENT_HOST_READONLY_TOOL:
+            _ro_tools = (
+                " **nas_host_readonly_profile** calls allow-listed read-only host diagnostics via SSH/nsenter (not arbitrary shell); "
+                "it does **not** replace **`/ssh`**. "
+            )
         system_prompt = (
             "You are a concise technical assistant for a NAS Telegram bot. "
             "You have tools for THIS host: temperatures, health score, disks, network, SMART, "
             "per-device SMART detail, OpenMediaVault disk/filesystem/SMART RPC when the host exposes omv-rpc, systemd, "
             "storage paths, Docker reads, and **nas_request_docker_restart** / **nas_request_docker_stop** "
-            "which post the same Telegram Confirm/Cancel buttons as /drestart and /dstop (nothing happens until the user confirms). "
-            "For other destructive host actions, still point users to slash commands. "
+            "which post the same Telegram Confirm/Cancel buttons as /drestart and /dstop (nothing happens until the user confirms)."
+            + _ro_tools +
+            " For other destructive host actions, still point users to slash commands. "
             "Never use markdown pipe tables; use short bullet lists. "
             "Whenever the user asks about their own machine, call tools first; do not invent metrics."
         )
@@ -169,7 +176,7 @@ async def generate_with_tools_loop(
         create_kwargs: Dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "tools": NAS_AGENT_TOOLS,
+            "tools": get_nas_agent_tools(),
             "tool_choice": "auto",
             "max_completion_tokens": max_tokens,
         }

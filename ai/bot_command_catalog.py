@@ -37,6 +37,7 @@ Telegram confirmations; tell users to run the command themselves when a confirma
 - `/drestart <name>` — Restart (inline confirm)
 - `/dstop <name>` — Stop (inline confirm)
 - In **/chat** and **/analyze**, the assistant may call tools that post the **same** restart/stop confirmation prompts (nothing runs until you tap Confirm).
+- When `AGENT_HOST_READONLY_TOOL=true` in `.env`, the assistant may call **nas_host_readonly_profile** — allow-listed read-only host checks via SSH/nsenter (APT list, systemd/journal tails for monitored units, `du`/find under scan paths **only**); not arbitrary shell and **not** a substitute for `/ssh`.
 - `/dtail <name> [lines]` — Container logs (default 50 lines, max 200)
 
 ## Files
