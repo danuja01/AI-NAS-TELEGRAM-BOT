@@ -8,10 +8,11 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from utils.security import require_auth, rate_limit
-from utils.formatters import format_error, format_success, format_ai_response
-from utils.telegram_reply import reply_text_chunked, delete_message_safe
+from utils.formatters import format_error, format_success
+from utils.telegram_reply import delete_message_safe, reply_ai_markdown_chunked
 from ai.rag_engine import ask, index_documents, is_rag_ready, get_index_stats
 import config
+from ai.agent_telegram import AgentTelegramBindings
 from ai.bot_command_catalog import BOT_COMMAND_CATALOG
 from ai.gpt_client import generate_with_thinking, generate_with_tools_loop, summarize_text
 from ai.search_engine import search_web, is_search_available
@@ -86,10 +87,15 @@ async def execute_ask(update: Update, context: ContextTypes.DEFAULT_TYPE, user_i
 
         status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
 
-        answer = await ask(question, user_id, use_thinking=False, search_web=False)
+        answer = await ask(
+            question,
+            user_id,
+            use_thinking=False,
+            search_web=False,
+            telegram_bindings=AgentTelegramBindings(update, context, user_id),
+        )
 
-        formatted_answer = format_ai_response(answer)
-        await reply_text_chunked(update, formatted_answer, parse_mode="Markdown")
+        await reply_ai_markdown_chunked(update, answer)
 
         await ConversationManager.add_message(user_id, "user", question)
         await ConversationManager.add_message(user_id, "assistant", answer)
@@ -120,27 +126,28 @@ async def execute_chat(
             full_ctx_parts.append(f"## Recent conversation\n{conv_context}")
         full_ctx = "\n\n".join(full_ctx_parts)
 
+        bind = AgentTelegramBindings(update, context, user_id)
         response = await generate_with_tools_loop(
             prompt=message,
             context=full_ctx,
             system_prompt=(
                 "You are a DevOps and NAS assistant running inside a Telegram bot. "
-                "You have read-only tools for THIS host: temperature sensors, health score, all disk mounts, "
-                "network stats, SMART drive summary, systemd services, storage paths from config, and Docker. "
-                "Whenever the user asks about their own machine (e.g. are temperatures normal?, disk space, drive health, "
-                "containers, services), you MUST call the relevant tool(s) first and answer from the returned data — "
-                "do not reply with only generic advice. "
-                "For actions that change state (restart/stop/prune/reboot), tell the user the exact slash "
-                "command from the reference (they require confirmations in Telegram). "
-                "Reply in clear Markdown suitable for Telegram."
+                "You have tools for THIS host: temperature sensors, health score, all disk mounts, "
+                "network stats, SMART drive summary, systemd services, storage paths from config, Docker reads, "
+                "and **nas_request_docker_restart** / **nas_request_docker_stop** which post the same inline "
+                "Confirm/Cancel UI as /drestart and /dstop (nothing happens until the user taps Confirm). "
+                "Whenever the user asks about their own machine, call read tools first and answer from data. "
+                "For container restart/stop requests, use the request_* tools after the user names the container. "
+                "Never use markdown pipe tables; use bullet lists with bold names. "
+                "For other destructive host actions, point to the exact slash command."
             ),
             model=config.DEFAULT_MODEL,
             temperature=0.5,
             max_tokens=3500,
+            telegram_bindings=bind,
         )
 
-        formatted_response = format_ai_response(response)
-        await reply_text_chunked(update, formatted_response, parse_mode="Markdown")
+        await reply_ai_markdown_chunked(update, response)
 
         await ConversationManager.add_message(user_id, "user", message)
         await ConversationManager.add_message(user_id, "assistant", response)
@@ -168,16 +175,15 @@ async def execute_summarize(
 
         status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
 
+        bind = AgentTelegramBindings(update, context, user_id)
         answer = await ask(
             f"Provide a comprehensive summary of information about: {topic}",
             user_id,
             use_thinking=False,
+            telegram_bindings=bind,
         )
 
-        formatted_answer = format_ai_response(answer)
-        await reply_text_chunked(
-            update, f"**Summary: {topic}**\n\n{formatted_answer}", parse_mode="Markdown"
-        )
+        await reply_ai_markdown_chunked(update, f"**Summary: {topic}**\n\n{answer}")
 
         await ConversationManager.add_message(user_id, "user", f"/summarize {topic}")
         await ConversationManager.add_message(user_id, "assistant", answer)
@@ -202,12 +208,13 @@ async def execute_explain(update: Update, context: ContextTypes.DEFAULT_TYPE, us
 
         status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
 
-        answer = await ask(f"Explain what '{term}' means", user_id)
-
-        formatted_answer = format_ai_response(answer)
-        await reply_text_chunked(
-            update, f"**Explanation: {term}**\n\n{formatted_answer}", parse_mode="Markdown"
+        answer = await ask(
+            f"Explain what '{term}' means",
+            user_id,
+            telegram_bindings=AgentTelegramBindings(update, context, user_id),
         )
+
+        await reply_ai_markdown_chunked(update, f"**Explanation: {term}**\n\n{answer}")
 
         await ConversationManager.add_message(user_id, "user", f"/explain {term}")
         await ConversationManager.add_message(user_id, "assistant", answer)
@@ -238,16 +245,15 @@ async def execute_analyze(
             full_ctx_parts.append(f"## Recent conversation\n{conv_context}")
         full_ctx = "\n\n".join(full_ctx_parts)
 
+        bind = AgentTelegramBindings(update, context, user_id)
+
         analyze_system = (
             "You are an expert technical assistant with deep reasoning. "
-            "You have read-only tools for THIS host: temperature sensors, health score, disk partitions, network, "
-            "SMART drives, systemd services, configured storage paths, Docker container list/logs/unhealthy, "
-            "and a combined snapshot. "
-            "Whenever the question depends on the user's actual NAS (e.g. normal temperatures?, is disk full?, "
-            "drive health, what is running), you MUST call the relevant tool(s) first and reason from the numbers — "
-            "never give only generic textbook ranges as the final conclusion without tool readings. "
-            "For destructive actions, only reference the appropriate slash command from the reference. "
-            "Respond in thorough Markdown suitable for Telegram."
+            "You have tools for THIS host: temperature sensors, health score, disk partitions, network, "
+            "SMART drives, systemd services, configured storage paths, Docker list/logs/unhealthy, snapshot, "
+            "and **nas_request_docker_restart** / **nas_request_docker_stop** (same inline Confirm/Cancel as /drestart /dstop). "
+            "For questions about this NAS, call tools first and reason from the data. "
+            "Never use markdown pipe tables; use bullet lists with bold names."
         )
 
         try:
@@ -258,6 +264,7 @@ async def execute_analyze(
                 model=config.THINKING_MODEL,
                 temperature=0.5,
                 max_tokens=4500,
+                telegram_bindings=bind,
             )
         except Exception as e1:
             logger.warning("analyze with thinking model + tools failed (%s); retry default model", e1)
@@ -269,15 +276,13 @@ async def execute_analyze(
                     model=config.DEFAULT_MODEL,
                     temperature=0.5,
                     max_tokens=4000,
+                    telegram_bindings=bind,
                 )
             except Exception as e2:
                 logger.warning("analyze with default model + tools failed (%s); fallback without tools", e2)
                 analysis = await generate_with_thinking(prompt=text, context=full_ctx)
 
-        formatted_analysis = format_ai_response(analysis)
-        await reply_text_chunked(
-            update, f"**Analysis:**\n\n{formatted_analysis}", parse_mode="Markdown"
-        )
+        await reply_ai_markdown_chunked(update, f"**Analysis:**\n\n{analysis}")
 
         await ConversationManager.add_message(user_id, "user", f"/analyze {text}")
         await ConversationManager.add_message(user_id, "assistant", analysis)
@@ -300,8 +305,7 @@ async def execute_think(update: Update, context: ContextTypes.DEFAULT_TYPE, user
 
         answer = await generate_with_thinking(prompt=question, context=conv_context)
 
-        formatted_answer = format_ai_response(answer)
-        await reply_text_chunked(update, formatted_answer, parse_mode="Markdown")
+        await reply_ai_markdown_chunked(update, answer)
 
         await ConversationManager.add_message(user_id, "user", f"/think {question}")
         await ConversationManager.add_message(user_id, "assistant", answer)
@@ -346,10 +350,9 @@ async def execute_websearch(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             max_length=150,
         )
 
-        formatted_summary = format_ai_response(summary)
-        message += f"**AI Summary:**\n{formatted_summary}"
+        message += f"**AI Summary:**\n{summary}"
 
-        await reply_text_chunked(update, message, parse_mode="Markdown")
+        await reply_ai_markdown_chunked(update, message)
 
         await ConversationManager.add_message(user_id, "user", f"/websearch {query}")
         await ConversationManager.add_message(user_id, "assistant", summary)

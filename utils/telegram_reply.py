@@ -94,6 +94,76 @@ async def reply_text_chunked(
     return True
 
 
+async def reply_ai_markdown_chunked(
+    update: Update,
+    raw_markdown: str,
+    *,
+    max_utf16: int = 3800,
+    **kwargs: Any,
+) -> bool:
+    """
+    Convert LLM Markdown (including GFM tables) to Telegram via ``telegramify-markdown`` → MarkdownV2,
+    splitting safely for the UTF-16 length limit. Falls back to ``format_ai_response`` + legacy Markdown.
+    """
+    em = update.effective_message
+    if em is None:
+        logger.warning(
+            "reply_ai_markdown_chunked: no effective_message (update_id=%s)",
+            getattr(update, "update_id", None),
+        )
+        return False
+
+    kwargs = {k: v for k, v in kwargs.items() if k != "parse_mode"}
+
+    raw = (raw_markdown or "").strip()
+    if not raw:
+        await em.reply_text("(empty response)", parse_mode=None)
+        return True
+
+    try:
+        from telegram.constants import ParseMode
+        from telegramify_markdown import convert, split_markdownv2
+    except ImportError:
+        from utils.formatters import format_ai_response
+
+        return await reply_text_chunked(
+            update, format_ai_response(raw_markdown or ""), parse_mode="Markdown", **kwargs
+        )
+
+    try:
+        text, entities = convert(raw_markdown or "")
+        parts = split_markdownv2(text, entities, max_utf16_len=max_utf16)
+    except Exception as e:
+        logger.warning("reply_ai_markdown_chunked: convert failed (%s); using fallback", e)
+        from utils.formatters import format_ai_response
+
+        return await reply_text_chunked(
+            update, format_ai_response(raw_markdown or ""), parse_mode="Markdown", **kwargs
+        )
+
+    if not parts:
+        from utils.formatters import format_ai_response
+
+        return await reply_text_chunked(
+            update, format_ai_response(raw_markdown or ""), parse_mode="Markdown", **kwargs
+        )
+
+    for part in parts:
+        chunk = (part or "").strip()
+        if not chunk:
+            continue
+        try:
+            await em.reply_text(chunk, parse_mode=ParseMode.MARKDOWN_V2, **kwargs)
+        except BadRequest as e:
+            err = str(e).lower()
+            logger.warning("reply_ai_markdown_chunked: send failed (%s); retrying plain", e)
+            if "too long" in err:
+                await em.reply_text(chunk[:4080], parse_mode=None, **kwargs)
+            else:
+                await em.reply_text(chunk, parse_mode=None, **kwargs)
+    return True
+
+
 async def reply_text_safe(
     update: Update,
     text: str,

@@ -36,6 +36,7 @@ Telegram confirmations; tell users to run the command themselves when a confirma
 - `/dstart <name>` — Start a container
 - `/drestart <name>` — Restart (inline confirm)
 - `/dstop <name>` — Stop (inline confirm)
+- In **/chat** and **/analyze**, the assistant may call tools that post the **same** restart/stop confirmation prompts (nothing runs until you tap Confirm).
 - `/dtail <name> [lines]` — Container logs (default 50 lines, max 200)
 
 ## Files

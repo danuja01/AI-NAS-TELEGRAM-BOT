@@ -1,19 +1,20 @@
 """
-Read-only tools the AI agent may call to answer questions with live NAS/Docker data.
-
-Mutating operations (restart/stop/reboot) are intentionally excluded; users run slash-commands.
+NAS agent tools for OpenAI function calling: host metrics, Docker reads, and
+interactive Docker restart/stop (Telegram confirmation only — same as /drestart /dstop).
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import psutil
 
 import config
+from ai.agent_telegram import AgentTelegramBindings
 from services import docker_service as ds
 from services.file_service import get_storage_summary
 from services.service_manager import list_common_services
@@ -55,7 +56,7 @@ def _tool_entry(
     }
 
 
-# OpenAI Chat Completions `tools` schema (read-only; mirrors /temps, /health, /disk, etc.)
+# OpenAI Chat Completions `tools`: host metrics, Docker reads, and interactive restart/stop prompts.
 NAS_AGENT_TOOLS: List[Dict[str, Any]] = [
     _tool_entry(
         "nas_temperature_sensors",
@@ -142,6 +143,25 @@ NAS_AGENT_TOOLS: List[Dict[str, Any]] = [
             "Quick live snapshot: CPU %, load average, memory %, swap, temperature sensors, sample disks, uptime. "
             "Use as a one-shot overview or after other focused tools if you still need CPU/load + temps together."
         ),
+    ),
+    _tool_entry(
+        "nas_request_docker_restart",
+        (
+            "Send the same inline Confirm/Cancel Telegram message as manual /drestart for one container. "
+            "The container does NOT restart until the user taps Confirm. Use only when the user explicitly "
+            "wants to restart a named container."
+        ),
+        {"container": {"type": "string", "description": "Exact Docker container name"}},
+        required=["container"],
+    ),
+    _tool_entry(
+        "nas_request_docker_stop",
+        (
+            "Send the same inline Confirm/Cancel Telegram message as manual /dstop. "
+            "The container does NOT stop until the user taps Confirm."
+        ),
+        {"container": {"type": "string", "description": "Exact Docker container name"}},
+        required=["container"],
     ),
 ]
 
@@ -414,7 +434,74 @@ def run_nas_tool(function_name: str, arguments: Dict[str, Any] | None) -> str:
             return _docker_unhealthy()
         if function_name == "nas_system_health_snapshot":
             return _system_snapshot()
+        if function_name in ("nas_request_docker_restart", "nas_request_docker_stop"):
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": "This action must be dispatched with Telegram context (internal)",
+                }
+            )
         return json.dumps({"ok": False, "error": f"Unknown tool: {function_name}"})
     except Exception as e:
         logger.exception("run_nas_tool %s", function_name)
         return json.dumps({"ok": False, "error": str(e)})
+
+
+async def dispatch_nas_agent_tool(
+    function_name: str,
+    arguments: Dict[str, Any] | None,
+    telegram_bind: Optional[AgentTelegramBindings] = None,
+) -> str:
+    """
+    Run one agent tool. Interactive Docker tools require ``telegram_bind`` from a live chat handler.
+    """
+    args = arguments or {}
+    if function_name == "nas_request_docker_restart":
+        if telegram_bind is None:
+            return json.dumps(
+                {"ok": False, "error": "Docker restart confirmation requires an active Telegram chat context"}
+            )
+        container = str(args.get("container", "")).strip()
+        if not _validate_container_name(container):
+            return json.dumps({"ok": False, "error": "Invalid container name"})
+        from commands import docker_cmds
+
+        await docker_cmds.send_restart_confirmation(
+            telegram_bind.update, telegram_bind.context, telegram_bind.user_id, container
+        )
+        return json.dumps(
+            {
+                "ok": True,
+                "container": container,
+                "message": (
+                    "Posted the restart confirmation with inline buttons in this chat. "
+                    "Tell the user to tap Confirm or Cancel; nothing restarts until Confirm."
+                ),
+            }
+        )
+
+    if function_name == "nas_request_docker_stop":
+        if telegram_bind is None:
+            return json.dumps(
+                {"ok": False, "error": "Docker stop confirmation requires an active Telegram chat context"}
+            )
+        container = str(args.get("container", "")).strip()
+        if not _validate_container_name(container):
+            return json.dumps({"ok": False, "error": "Invalid container name"})
+        from commands import docker_cmds
+
+        await docker_cmds.send_stop_confirmation(
+            telegram_bind.update, telegram_bind.context, telegram_bind.user_id, container
+        )
+        return json.dumps(
+            {
+                "ok": True,
+                "container": container,
+                "message": (
+                    "Posted the stop confirmation with inline buttons. "
+                    "Nothing stops until the user taps Confirm."
+                ),
+            }
+        )
+
+    return await asyncio.to_thread(run_nas_tool, function_name, args)
