@@ -145,8 +145,13 @@ async def generate_with_tools_loop(
     if system_prompt is None:
         system_prompt = (
             "You are a concise technical assistant for a NAS Telegram bot. "
-            "Use the provided tools whenever the user needs live facts about Docker or system resources. "
-            "Never guess container names or metrics. After tool results, summarize in Telegram-friendly Markdown."
+            "You have read-only tools for THIS host: temperatures (/temps-class data), health score, disks, "
+            "network counters, SMART drives, systemd services, configured storage paths, and Docker reads. "
+            "Whenever the user asks about their own machine (temperatures normal?, CPU, RAM, disks, drives, "
+            "containers, services), you MUST call the relevant tool(s) first and base your answer on the returned "
+            "numbers — never substitute generic industry ranges as the final answer without tool data. "
+            "After tools return, interpret briefly in Telegram Markdown. "
+            "For mutating actions, only point to the appropriate slash command."
         )
     rounds_limit = (
         max_tool_rounds if max_tool_rounds is not None else config.AGENT_MAX_TOOL_ROUNDS

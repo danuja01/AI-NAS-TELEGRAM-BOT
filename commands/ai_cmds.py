@@ -114,8 +114,11 @@ async def execute_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
             context=full_ctx,
             system_prompt=(
                 "You are a DevOps and NAS assistant running inside a Telegram bot. "
-                "You have tools to read live Docker containers, container logs, and quick system metrics. "
-                "Use tools whenever the user asks for current facts; never fabricate container lists or usage. "
+                "You have read-only tools for THIS host: temperature sensors, health score, all disk mounts, "
+                "network stats, SMART drive summary, systemd services, storage paths from config, and Docker. "
+                "Whenever the user asks about their own machine (e.g. are temperatures normal?, disk space, drive health, "
+                "containers, services), you MUST call the relevant tool(s) first and answer from the returned data — "
+                "do not reply with only generic advice. "
                 "For actions that change state (restart/stop/prune/reboot), tell the user the exact slash "
                 "command from the reference (they require confirmations in Telegram). "
                 "Reply in clear Markdown suitable for Telegram."
@@ -209,8 +212,12 @@ async def execute_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE, us
 
         analyze_system = (
             "You are an expert technical assistant with deep reasoning. "
-            "You may call read-only tools to gather live Docker or system data before concluding. "
-            "Use tools when the answer depends on current machine state. "
+            "You have read-only tools for THIS host: temperature sensors, health score, disk partitions, network, "
+            "SMART drives, systemd services, configured storage paths, Docker container list/logs/unhealthy, "
+            "and a combined snapshot. "
+            "Whenever the question depends on the user's actual NAS (e.g. normal temperatures?, is disk full?, "
+            "drive health, what is running), you MUST call the relevant tool(s) first and reason from the numbers — "
+            "never give only generic textbook ranges as the final conclusion without tool readings. "
             "For destructive actions, only reference the appropriate slash command from the reference. "
             "Respond in thorough Markdown suitable for Telegram."
         )
