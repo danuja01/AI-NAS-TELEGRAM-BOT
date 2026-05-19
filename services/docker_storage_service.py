@@ -14,6 +14,47 @@ from utils.shell_exec import ShellResult, run_sync
 
 logger = logging.getLogger(__name__)
 
+
+def _container_row_running(row: Dict[str, Any]) -> bool:
+    """True if dashboard row counts as running (CLI JSON varies by Docker version)."""
+    state = (row.get("State") or row.get("state") or "").strip().lower()
+    status = (row.get("Status") or row.get("status") or "").strip().lower()
+    if state == "running":
+        return True
+    # docker ps --format json often only has Status: "Up 2 hours", no State
+    if status.startswith("up"):
+        return True
+    return False
+
+
+def _docker_ps_via_sdk() -> List[Dict[str, Any]]:
+    """Container list compatible with dashboard formatter / counts (same socket as SDK image list)."""
+    import docker
+
+    client = docker.from_env()
+    out: List[Dict[str, Any]] = []
+    for c in client.containers.list(all=True):
+        name = getattr(c, "name", "") or ""
+        status = getattr(c, "status", "") or ""
+        image_name = ""
+        try:
+            tags = c.image.tags or []
+            image_name = tags[0] if tags else getattr(c.image, "id", "?")[:19]
+        except Exception:
+            image_name = "?"
+        cid = getattr(c, "short_id", "")
+        out.append(
+            {
+                "ID": cid.replace("sha256:", ""),
+                "Names": name.lstrip("/"),
+                "Image": image_name or "?",
+                "State": status,
+                "Status": status,
+            }
+        )
+    return out
+
+
 # Fixed docker CLI invocations only — never interpolate user input.
 DOCKER_DF = ["docker", "system", "df"]
 DOCKER_DF_V = ["docker", "system", "df", "-v"]
@@ -73,8 +114,23 @@ def docker_system_df(verbose: bool = False) -> ShellResult:
 
 
 def docker_ps_json_lines() -> List[Dict[str, Any]]:
+    # Prefer Docker SDK: official image has no docker.io CLI binary, only the socket mount.
+    try:
+        return _docker_ps_via_sdk()
+    except ImportError:
+        logger.warning("docker_ps_json_lines: python docker SDK unavailable, trying CLI")
+    except Exception as e:
+        logger.warning("docker_ps_json_lines: SDK failed (%s); trying CLI", e)
+
     r = run_sync(DOCKER_PS_A)
     out = []
+    if r.error:
+        logger.debug(
+            "docker_ps_json_lines CLI: argv=%s err=%s stderr=%s",
+            r.argv[:3],
+            r.error,
+            (r.stderr or "")[:200],
+        )
     if not r.stdout:
         return out
     for line in r.stdout.splitlines():
@@ -216,8 +272,7 @@ def run_quick_prune() -> PruneResult:
 def count_containers() -> Tuple[int, int]:
     running = stopped = 0
     for c in docker_ps_json_lines():
-        state = (c.get("State") or "").lower()
-        if state == "running":
+        if _container_row_running(c):
             running += 1
         else:
             stopped += 1
