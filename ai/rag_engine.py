@@ -268,10 +268,16 @@ async def ask(
         
         rag_ro = ""
         if config.AGENT_HOST_READONLY_TOOL:
-            rag_ro = (
-                "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** may appear: allow-listed read-only "
-                "host diagnostics over SSH/nsenter (not arbitrary shell); it **does not** replace **`/ssh`**. "
-            )
+            if getattr(config, "AGENT_HOST_READONLY_EVALUATOR_MODE", False):
+                rag_ro = (
+                    "When enabled, **nas_host_read_request** may appear for natural-language read-only host checks: "
+                    "a separate evaluator maps to fixed profiles (not arbitrary shell); it **does not** replace **`/ssh`**. "
+                )
+            else:
+                rag_ro = (
+                    "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** may appear: allow-listed read-only "
+                    "host diagnostics over SSH/nsenter (not arbitrary shell); it **does not** replace **`/ssh`**. "
+                )
         rag_system = (
             "You are a helpful AI assistant for a NAS Telegram bot. Answer using the provided context. "
             "The command reference describes what users can type in Telegram. "
@@ -300,6 +306,7 @@ async def ask(
                 temperature=0.4,
                 max_tokens=3500,
                 telegram_bindings=telegram_bindings,
+                nas_tools_for_rag=True,
             )
         
         return answer

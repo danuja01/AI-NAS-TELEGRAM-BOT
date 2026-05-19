@@ -70,6 +70,12 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 # When True, expose nas_host_readonly_profile to /chat /analyze /ask agent (allowlisted host reads via host_runner).
 AGENT_HOST_READONLY_TOOL = _env_bool("AGENT_HOST_READONLY_TOOL", False)
+# When True, replace enum tool with nas_host_read_request: a second LLM maps natural language to the same fixed profiles.
+AGENT_HOST_READONLY_EVALUATOR_MODE = _env_bool("AGENT_HOST_READONLY_EVALUATOR_MODE", False)
+# If True with evaluator mode: /ask (RAG) gets nas_host_read_request only; /chat keeps nas_host_readonly_profile enum.
+AGENT_HOST_READ_EVALUATOR_RAG_ONLY = _env_bool("AGENT_HOST_READ_EVALUATOR_RAG_ONLY", False)
+# Model for the host-read evaluator (empty = DEFAULT_MODEL). Use a small fast model recommended.
+HOST_READ_EVALUATOR_MODEL = os.getenv("HOST_READ_EVALUATOR_MODEL", "").strip()
 
 # After startup: re-index RAG documents and message ALLOWED_USER_IDS (good after new deploy).
 AUTO_INDEX_ON_START = _env_bool("AUTO_INDEX_ON_START", False)

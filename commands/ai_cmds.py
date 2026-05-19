@@ -129,10 +129,17 @@ async def execute_chat(
         bind = AgentTelegramBindings(update, context, user_id)
         _ro_chat = ""
         if config.AGENT_HOST_READONLY_TOOL:
-            _ro_chat = (
-                "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** runs allow-listed read-only "
-                "host diagnostics over SSH/nsenter (not arbitrary shell) and **does not** replace **`/ssh`**. "
-            )
+            if getattr(config, "AGENT_HOST_READONLY_EVALUATOR_MODE", False):
+                _ro_chat = (
+                    "When enabled, **nas_host_read_request** routes natural-language read intents through a separate "
+                    "JSON-only evaluator to the same fixed read-only host profiles (not arbitrary shell); "
+                    "it **does not** replace **`/ssh`**. "
+                )
+            else:
+                _ro_chat = (
+                    "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** runs allow-listed read-only "
+                    "host diagnostics over SSH/nsenter (not arbitrary shell) and **does not** replace **`/ssh`**. "
+                )
         response = await generate_with_tools_loop(
             prompt=message,
             context=full_ctx,
@@ -259,10 +266,16 @@ async def execute_analyze(
 
         _ro_analyze = ""
         if config.AGENT_HOST_READONLY_TOOL:
-            _ro_analyze = (
-                "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** is allow-listed read-only host "
-                "diagnostics via SSH/nsenter (not arbitrary shell); it **does not** replace **`/ssh`**. "
-            )
+            if getattr(config, "AGENT_HOST_READONLY_EVALUATOR_MODE", False):
+                _ro_analyze = (
+                    "When enabled, **nas_host_read_request** uses a separate evaluator to map read intents to fixed "
+                    "host profiles (not arbitrary shell); it **does not** replace **`/ssh`**. "
+                )
+            else:
+                _ro_analyze = (
+                    "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** is allow-listed read-only host "
+                    "diagnostics via SSH/nsenter (not arbitrary shell); it **does not** replace **`/ssh`**. "
+                )
         analyze_system = (
             "You are an expert technical assistant with deep reasoning. "
             "You have tools for THIS host: temperature sensors, health score, disk partitions, network, "

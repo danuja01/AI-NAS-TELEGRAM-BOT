@@ -46,20 +46,10 @@ _SMART_DEVICE_RE = re.compile(
     r"^(/dev/sd[a-z]+|/dev/nvme\d+n\d+(?:p\d+)?|/dev/disk/by-id/[\w./-]+)$"
 )
 
+from ai.host_read_profiles import HOST_READONLY_PROFILES, HOST_READONLY_PROFILES_ORDERED
+
 _MAX_SERVICES = 45
 _MAX_SMART_DRIVES = 12
-
-_HOST_READONLY_PROFILES_ORDERED: List[str] = [
-    "apt_list_upgradable",
-    "reboot_required",
-    "systemctl_is_active",
-    "journal_tail",
-    "systemctl_failed",
-    "du_path",
-    "find_large_files",
-]
-
-_HOST_READONLY_PROFILES = frozenset(_HOST_READONLY_PROFILES_ORDERED)
 
 
 def _tool_entry(
@@ -95,7 +85,7 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
     {
         "profile": {
             "type": "string",
-            "enum": list(_HOST_READONLY_PROFILES_ORDERED),
+            "enum": list(HOST_READONLY_PROFILES_ORDERED),
             "description": "Predefined read-only operation; pick args below only when required for this profile.",
         },
         "unit": {
@@ -124,6 +114,46 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
         },
     },
     required=["profile"],
+)
+
+
+_NAS_HOST_READ_REQUEST_TOOL_ENTRY = _tool_entry(
+    "nas_host_read_request",
+    (
+        "Request a **read-only** host diagnostic on the NAS (SSH/nsenter) using natural language. "
+        "A **separate security evaluator** (no access to your RAG documents) maps this to one fixed "
+        "non-shell profile (same catalog as the enum tool). Execution only happens after that mapping "
+        "passes hard validation (paths under STORAGE_SCAN_PATHS, systemd unit policy). "
+        "Requires AGENT_HOST_READONLY_TOOL=true and AGENT_HOST_READONLY_EVALUATOR_MODE=true. "
+        "Does **not** run arbitrary commands and does **not** replace `/ssh`."
+    ),
+    {
+        "request_summary": {
+            "type": "string",
+            "description": (
+                "Short description of the read-only check (e.g. 'show pending apt upgrades', "
+                "'disk usage under /var/lib/docker', 'last 20 lines of nginx logs'). "
+                "Do not put shell commands here — only describe intent."
+            ),
+        },
+        "path_hint": {
+            "type": "string",
+            "description": "Optional absolute path hint for du/find (must still be under allowed scan roots).",
+        },
+        "unit_hint": {
+            "type": "string",
+            "description": "Optional systemd unit hint (e.g. nginx.service) for journal/status profiles.",
+        },
+        "min_mb_hint": {
+            "type": "integer",
+            "description": "Optional minimum file size in MiB for large-file find.",
+        },
+        "max_n_hint": {
+            "type": "integer",
+            "description": "Optional max file entries for large-file find.",
+        },
+    },
+    required=["request_summary"],
 )
 
 
@@ -269,16 +299,29 @@ _NAS_AGENT_TOOLS_BASE: List[Dict[str, Any]] = [
     ),
 ]
 
-# Stable export: base tools only. Use ``get_nas_agent_tools()`` for the live tool list passed to OpenAI.
-NAS_AGENT_TOOLS = _NAS_AGENT_TOOLS_BASE
 
-
-def get_nas_agent_tools() -> List[Dict[str, Any]]:
-    """Tools for Chat Completions, including optional read-only host profile when configured."""
+def get_nas_agent_tools(for_rag: bool = False) -> List[Dict[str, Any]]:
+    """Tools for Chat Completions, including optional read-only host access when configured."""
     out = list(_NAS_AGENT_TOOLS_BASE)
-    if config.AGENT_HOST_READONLY_TOOL:
+    if not config.AGENT_HOST_READONLY_TOOL:
+        return out
+    rag_split = getattr(config, "AGENT_HOST_READ_EVALUATOR_RAG_ONLY", False)
+    eval_mode = getattr(config, "AGENT_HOST_READONLY_EVALUATOR_MODE", False)
+    if rag_split:
+        if for_rag and eval_mode:
+            out.append(_NAS_HOST_READ_REQUEST_TOOL_ENTRY)
+        elif not for_rag:
+            out.append(_NAS_HOST_READONLY_PROFILE_TOOL_ENTRY)
+        return out
+    if eval_mode:
+        out.append(_NAS_HOST_READ_REQUEST_TOOL_ENTRY)
+    else:
         out.append(_NAS_HOST_READONLY_PROFILE_TOOL_ENTRY)
     return out
+
+
+# Default snapshot for legacy imports; prefer ``get_nas_agent_tools(...)``.
+NAS_AGENT_TOOLS = get_nas_agent_tools(False)
 
 
 def _exec_host_readonly_profile(user_id: Optional[int], args: Dict[str, Any]) -> str:
@@ -286,7 +329,7 @@ def _exec_host_readonly_profile(user_id: Optional[int], args: Dict[str, Any]) ->
     Invoke host_runner.run_profile for AI-allowlisted profiles only (no shell from the model).
     """
     profile = str(args.get("profile", "")).strip()
-    if profile not in _HOST_READONLY_PROFILES:
+    if profile not in HOST_READONLY_PROFILES:
         return json.dumps({"ok": False, "error": f"disallowed profile: {profile!r}"})
 
     extra: List[str] = []
@@ -710,6 +753,31 @@ async def dispatch_nas_agent_tool(
     Run one agent tool. Interactive Docker tools require ``telegram_bind`` from a live chat handler.
     """
     args = arguments or {}
+    if function_name == "nas_host_read_request":
+        if not (
+            config.AGENT_HOST_READONLY_TOOL and getattr(config, "AGENT_HOST_READONLY_EVALUATOR_MODE", False)
+        ):
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": "nas_host_read_request disabled (need AGENT_HOST_READONLY_TOOL=true and "
+                    "AGENT_HOST_READONLY_EVALUATOR_MODE=true)",
+                }
+            )
+        from ai.host_read_gate import evaluate_natural_host_read_request
+
+        uid = telegram_bind.user_id if telegram_bind else None
+        summary = str(args.get("request_summary", ""))
+        hints = {
+            k: args.get(k)
+            for k in ("path_hint", "unit_hint", "min_mb_hint", "max_n_hint")
+            if args.get(k) is not None
+        }
+        resolved, err = await evaluate_natural_host_read_request(summary, hints)
+        if err:
+            return json.dumps({"ok": False, "error": err})
+        return await asyncio.to_thread(_exec_host_readonly_profile, uid, resolved)
+
     if function_name == "nas_host_readonly_profile":
         if not config.AGENT_HOST_READONLY_TOOL:
             return json.dumps(
