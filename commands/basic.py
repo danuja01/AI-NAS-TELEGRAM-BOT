@@ -11,53 +11,81 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from utils.security import require_auth, rate_limit
+from utils.telegram_reply import reply_text_chunked
 
 logger = logging.getLogger(__name__)
 
-# Short HTML snippets for /help buttons (Telegram HTML: no arbitrary tags; stick to b/code/br).
+# One line per command — command in <code>, then a short explanation (Telegram HTML).
 HELP_SECTION_BODIES: dict[str, str] = {
     "mon": (
         "<b>Monitoring</b>\n\n"
-        "<code>/status</code> overview\n"
-        "<code>/cpu</code> <code>/ram</code> <code>/disk</code>\n"
-        "<code>/temps</code> <code>/network</code> <code>/uptime</code>\n"
-        "<code>/health</code> score\n"
-        "<code>/smart</code> <code>/drives</code> SMART\n"
-        "<code>/hdddetail</code> HDD detail + samples"
+        "<code>/status</code> — Full system overview\n"
+        "<code>/cpu</code> — CPU usage and load average\n"
+        "<code>/ram</code> — Memory usage and swap\n"
+        "<code>/disk</code> — Disk partitions and free space\n"
+        "<code>/temps</code> — Temperature sensors\n"
+        "<code>/network</code> — Network traffic and interfaces\n"
+        "<code>/uptime</code> — How long the NAS has been up\n"
+        "<code>/health</code> — Overall health score with issues list\n"
+        "<code>/smart</code> — Drive health (SMART summary)\n"
+        "<code>/drives</code> — Same summary as /smart\n"
+        "<code>/hdddetail</code> — HDD detail: spin counters, hdparm state, sample history\n"
     ),
     "dock": (
         "<b>Docker · storage</b>\n\n"
-        "<code>/docker</code> dashboard (df, counts, table)\n"
-        "<code>/containers</code> compact list + CPU/RAM\n"
-        "<code>/dscan</code> full scan · <code>/dhealth</code> report\n"
-        "<code>/dclean</code> · <code>/dprune</code> · <code>/daggressive</code>\n"
-        "<code>/dimages</code> · <code>/dbigfiles</code> · <code>/dlogs</code>\n"
-        "<code>/dstart</code> · <code>/drestart</code> · "
-        "<code>/dstop</code> · <code>/dtail</code>"
+        "<code>/docker</code> — Dashboard: disk usage summary, counts, container table\n"
+        "<code>/containers</code> — Compact running/stopped list with CPU/RAM\n"
+        "<code>/dscan</code> — Deep scan: Docker paths, large files, prune estimates\n"
+        "<code>/dclean</code> — Safe cleanup (stopped containers, unused images, cache; confirms)\n"
+        "<code>/dprune</code> — Quick prune: dangling images and build cache\n"
+        "<code>/daggressive</code> — Extra cleanup (unused networks + apt cache; 2-step confirm)\n"
+        "<code>/dimages</code> — All images flagged unused/dangling/in use\n"
+        "<code>/dbigfiles</code> — Largest files under allow-listed paths\n"
+        "<code>/dlogs</code> — Very large log files on scanned paths\n"
+        "<code>/dhealth</code> — NAS + Docker combined health snapshot\n"
+        "<code>/dstart</code> — Start a container by name\n"
+        "<code>/drestart</code> — Restart a container (confirmation)\n"
+        "<code>/dstop</code> — Stop a container (confirmation)\n"
+        "<code>/dtail</code> — Tail logs from a container\n"
+        "<i>Older names /restart /stop /logs redirect to drestart dstop dtail.</i>\n"
     ),
     "files": (
         "<b>Files</b>\n\n"
-        "<code>/files</code> browse docs path\n"
-        "<code>/ls</code> <code>[path]</code> · <code>/ls --all</code>\n"
-        "<code>/find</code> · <code>/tree</code> · <code>/storage</code>\n"
-        "<code>/download</code> · <code>/uploadfile</code>\n"
-        "<code>/cd</code> (root session)"
+        "<code>/files</code> — Browse the default document folder\n"
+        "<code>/ls</code> — List dir with numbered files (optional path; <code>--all</code> for hidden)\n"
+        "<code>/find</code> — Search filenames under allowed roots\n"
+        "<code>/tree</code> — Directory tree outline\n"
+        "<code>/storage</code> — Disk usage summary for key paths\n"
+        "<code>/download</code> — Download file by number after /ls, or ZIP a range\n"
+        "<code>/uploadfile</code> — Send a document to NAS (needs root)\n"
+        "<code>/cd</code> — Print or change working directory (root session for full paths)\n"
     ),
     "ai": (
         "<b>AI</b>\n\n"
-        "<code>/ask</code> docs (RAG) · <code>/chat</code>\n"
-        "<code>/summarize</code> · <code>/explain</code>\n"
-        "<code>/analyze</code> · <code>/think</code>\n"
-        "<code>/websearch</code> · <code>/index</code>\n"
-        "<code>/clear</code> · <code>/cancel</code> pending prompts"
+        "<code>/ask</code> — Ask your indexed documents (RAG)\n"
+        "<code>/chat</code> — Free-form chat with the model\n"
+        "<code>/summarize</code> — Summarize a topic from documents\n"
+        "<code>/explain</code> — Explain a term from documents\n"
+        "<code>/analyze</code> — Deeper analysis of pasted or follow-up text\n"
+        "<code>/think</code> — Reasoning-focused answer\n"
+        "<code>/websearch</code> — Web search + answer\n"
+        "<code>/index</code> — Re-build the document index (admin)\n"
+        "<code>/clear</code> — Clear conversation history\n"
+        "<code>/cancel</code> — Abort when the bot is waiting for your next message\n"
     ),
     "srv": (
         "<b>Services · host</b>\n\n"
-        "<code>/services</code> · <code>/restart_service</code>\n"
-        "<code>/reboot</code> · <code>/shutdown</code>\n"
-        "<code>/updates</code> · <code>/omv_updates</code> · <code>/upgrade</code>\n"
-        "<code>/rootlogin</code> · <code>/rootstatus</code> · "
-        "<code>/rootlogout</code> · <code>/ssh</code>"
+        "<code>/services</code> — List systemd services and status\n"
+        "<code>/restart_service</code> — Restart one service by name\n"
+        "<code>/reboot</code> — Reboot the NAS (confirmation)\n"
+        "<code>/shutdown</code> — Shut down the NAS (confirmation)\n"
+        "<code>/updates</code> — Check APT / OMV updates on the host\n"
+        "<code>/omv_updates</code> — Updates plus OMV-specific note\n"
+        "<code>/upgrade</code> — Run omv-upgrade (strong confirmation)\n"
+        "<code>/rootlogin</code> — Start a short root session (password)\n"
+        "<code>/rootstatus</code> — See if root session is active\n"
+        "<code>/rootlogout</code> — End root session\n"
+        "<code>/ssh</code> — Run one shell command on host (root only)\n"
     ),
 }
 
@@ -127,9 +155,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Monitoring, Docker, files, and AI in one place.\n\n"
         "<b>Tip:</b> type <code>/</code> — Telegram shows every command with a short hint.\n\n"
         "<b>Highlights</b>\n"
-        "• <code>/status</code> · <code>/docker</code> · <code>/containers</code>\n"
-        "• <code>/ls</code> · <code>/ask</code> · <code>/services</code>\n\n"
-        "<i>Tap a category below for the full command list.</i>"
+        "• <code>/status</code> — system snapshot\n"
+        "• <code>/docker</code> — Docker dashboard\n"
+        "• <code>/containers</code> — quick container list\n"
+        "• <code>/ls</code> / <code>/ask</code> / <code>/services</code>\n\n"
+        "<i>Tap a category — each message lists one command per line with a short description.</i>"
     )
     await update.message.reply_text(
         intro,
@@ -159,7 +189,8 @@ async def help_category_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     await query.answer()
     if query.message:
-        await query.message.reply_text(
+        await reply_text_chunked(
+            update,
             body,
             parse_mode=ParseMode.HTML,
             disable_web_page_preview=True,
