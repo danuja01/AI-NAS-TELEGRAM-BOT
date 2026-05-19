@@ -145,6 +145,8 @@ async def execute_chat(
                 "Confirm/Cancel UI as /drestart and /dstop (nothing happens until the user taps Confirm). "
                 + _ro_chat
                 + "Whenever the user asks about their own machine, call read tools first and answer from data. "
+                "For bot slash commands (/drestart, /dimages), use monospace with one pair of Markdown backticks, "
+                "not bold/italic asterisks around commands. "
                 "For container restart/stop requests, use the request_* tools after the user names the container. "
                 "Never use markdown pipe tables; use bullet lists with bold names. "
                 "For other destructive host actions, point to the exact slash command."
@@ -269,7 +271,8 @@ async def execute_analyze(
             "and **nas_request_docker_restart** / **nas_request_docker_stop** (same inline Confirm/Cancel as /drestart /dstop). "
             + _ro_analyze
             + "For questions about this NAS, call tools first and reason from the data. "
-            "Never use markdown pipe tables; use bullet lists with bold names."
+            + "Never use markdown pipe tables; use bullet lists with bold names. "
+            "For bot slash commands, use monospace (single backticks) not ** or * around commands."
         )
 
         try:

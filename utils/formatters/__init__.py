@@ -20,6 +20,29 @@ def _h(value: Any) -> str:
     return escape_telegram_html(value)
 
 
+# GFM bold/italic wrappers around Telegram-style slash commands (LLMs emit **/cmd** often;
+# legacy Telegram Markdown does not treat ** as bold, so users see literal asterisks).
+_AI_CMD_GFM_BOLD_RE = re.compile(r"\*\*\s*((/\w[\w_-]*))\s*\*\*")
+_AI_CMD_GFM_UNDER_BOLD_RE = re.compile(r"__\s*((/\w[\w_-]*))\s*__")
+# Italic-style single * around slash commands without touching ** spans
+_AI_CMD_STAR_ITALIC_RE = re.compile(r"(?<!\*)\*((/\w[\w_-]*))\*(?!\*)")
+
+
+def normalize_ai_reply_markdown_for_telegram(text: str) -> str:
+    """
+    Turn ``**/foobar**``-style wrappers around slash commands into inline code spans.
+
+    Telegram's classic ``Markdown`` mode does not understand GitHub ``**bold**``; unchanged
+    text shows stray stars. Backticks survive both legacy Markdown and MarkdownV2 paths.
+    """
+    if not text:
+        return text
+    text = _AI_CMD_GFM_BOLD_RE.sub(r"`\1`", text)
+    text = _AI_CMD_GFM_UNDER_BOLD_RE.sub(r"`\1`", text)
+    text = _AI_CMD_STAR_ITALIC_RE.sub(r"`\1`", text)
+    return text
+
+
 def format_ai_response(text: str) -> str:
     """
     Light cleanup for legacy Markdown replies.
@@ -29,7 +52,9 @@ def format_ai_response(text: str) -> str:
     """
     if not text:
         return text
-    
+
+    text = normalize_ai_reply_markdown_for_telegram(text)
+
     # Convert markdown headings to bold text with line breaks
     # ### Heading → **Heading**
     text = re.sub(r'^#{1,6}\s+(.+)$', r'**\1**', text, flags=re.MULTILINE)

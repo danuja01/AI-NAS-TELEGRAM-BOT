@@ -279,6 +279,7 @@ async def ask(
             "You may call **nas_request_docker_restart** or **nas_request_docker_stop** to post the same inline "
             "Confirm/Cancel prompts as /drestart and /dstop; nothing runs until the user confirms. "
             + rag_ro
+            + "Put bot slash commands in markdown inline code (/command with backticks), not * or ** around commands. "
             + "Do not use markdown pipe tables in replies; use bullet lists. "
             "If the question is about the user's own NAS state, call tools first; do not invent readings. "
             "If the context does not contain the answer, say so. Be concise and accurate."

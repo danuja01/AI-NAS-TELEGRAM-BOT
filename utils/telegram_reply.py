@@ -8,6 +8,8 @@ from typing import Any, List, Optional
 from telegram import Message, Update
 from telegram.error import BadRequest
 
+from utils.formatters import normalize_ai_reply_markdown_for_telegram
+
 logger = logging.getLogger(__name__)
 
 
@@ -115,7 +117,7 @@ async def reply_ai_markdown_chunked(
 
     kwargs = {k: v for k, v in kwargs.items() if k != "parse_mode"}
 
-    raw = (raw_markdown or "").strip()
+    raw = normalize_ai_reply_markdown_for_telegram((raw_markdown or "").strip())
     if not raw:
         await em.reply_text("(empty response)", parse_mode=None)
         return True

@@ -159,6 +159,10 @@ async def generate_with_tools_loop(
             + _ro_tools +
             " For other destructive host actions, still point users to slash commands. "
             "Never use markdown pipe tables; use short bullet lists. "
+            "Telegram renders Markdown strangely: wrap bot slash commands in inline code "
+            "(one backtick before and after the command, like "
+            "`/dimages` — use the real backtick character), "
+            "not **bold** or *italic* around /commands or users often see stray * characters. "
             "Whenever the user asks about their own machine, call tools first; do not invent metrics."
         )
     rounds_limit = (
