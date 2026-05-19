@@ -42,6 +42,9 @@ services:
       - METRICS_SAMPLE_INTERVAL_MINUTES=${METRICS_SAMPLE_INTERVAL_MINUTES:-15}
       - DIGEST_INTERVAL_HOURS=${DIGEST_INTERVAL_HOURS:-24}
       - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-5}
+      # Re-index RAG docs after each container start + notify ALLOWED_USER_IDS on Telegram
+      - AUTO_INDEX_ON_START=${AUTO_INDEX_ON_START:-true}
+      - AUTO_INDEX_FORCE_REINDEX=${AUTO_INDEX_FORCE_REINDEX:-false}
 
     # Mount volumes for persistent data
     volumes:

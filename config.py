@@ -58,6 +58,19 @@ ROOT_PASSWORD = os.getenv("ROOT_PASSWORD", "")
 # Conversation Settings
 CONVERSATION_HISTORY_LENGTH = int(os.getenv("CONVERSATION_HISTORY_LENGTH", "10"))
 
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+# After startup: re-index RAG documents and message ALLOWED_USER_IDS (good after new deploy).
+AUTO_INDEX_ON_START = _env_bool("AUTO_INDEX_ON_START", False)
+# If true, clears the Chroma collection first (slower; use if embedding model changed).
+AUTO_INDEX_FORCE_REINDEX = _env_bool("AUTO_INDEX_FORCE_REINDEX", False)
+
 # Database Configuration
 DATABASE_PATH = os.getenv("DATABASE_PATH", str(DATA_DIR / "bot.db"))
 CHROMA_PATH = os.getenv("CHROMA_PATH", str(DATA_DIR / "chroma_db"))

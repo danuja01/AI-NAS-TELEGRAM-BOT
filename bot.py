@@ -2,6 +2,7 @@
 NAS Telegram AI Assistant - Main Entry Point
 """
 
+import asyncio
 import logging
 
 from telegram import (
@@ -24,6 +25,7 @@ import config
 from utils.logger import setup_logging
 from database.models import init_database
 from monitoring.health_checker import start_health_monitoring
+from utils.startup_auto_index import run_auto_index_on_startup
 
 # Import command handlers
 from commands import basic, monitoring, docker_cmds, filesystem, ai_cmds, service, root_cmds, operations
@@ -134,6 +136,10 @@ async def post_init(application: Application):
     
     logger.info("Starting health monitoring, metrics, digests, cron hook…")
     await start_health_monitoring(application.bot)
+
+    if config.AUTO_INDEX_ON_START:
+        asyncio.create_task(run_auto_index_on_startup(application))
+        logger.info("Scheduled post-start auto-index (AUTO_INDEX_ON_START=1)")
 
     logger.info("Bot initialized successfully!")
 
