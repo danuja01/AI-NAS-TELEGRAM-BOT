@@ -1,58 +1,62 @@
-start - Welcome message
-help - Show all available commands
+start - Welcome and overview
+help - Compact guide with category buttons
 
 status - System overview
-cpu - CPU usage and load
-ram - Memory statistics
-disk - Disk usage
+cpu - CPU usage
+ram - Memory usage
+disk - Disk partitions
 temps - Temperature sensors
-network - Network statistics
+network - Network stats
 uptime - System uptime
-health - System health score
-smart - Drive health (SMART data)
-drives - List all drives
+health - Health score
+smart - Drive SMART
+drives - Same as SMART
+hdddetail - HDD SMART + spin history
 
-ddocker - Docker dashboard
+docker - Docker dashboard
+containers - Container list (compact)
 dscan - Docker storage scan
 dclean - Safe Docker cleanup
 dprune - Quick Docker prune
 dimages - Docker images
 dbigfiles - Largest files
 dlogs - Huge log files
-dhealth - NAS Docker health
+dhealth - NAS + Docker health
 daggressive - Aggressive cleanup
 dstart - Start a container
 drestart - Restart a container
 dstop - Stop a container
 dtail - Container log tail
-docker - Alias for ddocker
-containers - Alias for ddocker
 
-files - Browse default document path
-ls - List directory with numbered files
-download - Download file(s) from list
-uploadfile - Upload file (requires root)
-find - Search for files
-tree - Show directory tree
-storage - Storage usage summary
-cd - Change working directory (requires root)
+files - Browse files
+ls - List directory
+find - Find files
+tree - Directory tree
+storage - Disk usage paths
+download - Download file
+uploadfile - Upload file
 
-services - List system services
-restart_service - Restart a service
-reboot - Reboot the system
-shutdown - Shutdown the system
+services - System services
+restart_service - Restart service
+reboot - Reboot (confirm)
+shutdown - Shutdown (confirm)
 
-ask - Ask about your documents (RAG)
-chat - General AI chat
-summarize - Summarize documents
-explain - Explain from documents
-analyze - Deep analysis (uses o3-mini)
-think - Complex reasoning
-websearch - Search the internet
+ask - Ask documents (RAG)
+chat - Chat with AI
+summarize - Summarize docs
+explain - Explain a term
+analyze - Analyze text
+think - Deep reasoning
+websearch - Web search
 index - Re-index documents
-clear - Clear conversation history
+clear - Clear history
+cancel - Cancel pending AI input
 
-rootlogin - Temporary root access (30min)
-rootstatus - Check root session status
-rootlogout - End root session
-ssh - Execute shell commands (requires root)
+rootlogin - Root session
+rootlogout - End root
+rootstatus - Root session status
+ssh - Remote shell cmd
+cd - Working directory
+updates - Check APT/OMV updates
+omv_updates - Updates + OMV note
+upgrade - Run omv-upgrade (confirm)

@@ -4,12 +4,82 @@ Includes /start and /help commands.
 """
 
 import logging
-from telegram import Update
+
+import config
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from utils.security import require_auth, rate_limit
 
 logger = logging.getLogger(__name__)
+
+# Short HTML snippets for /help buttons (Telegram HTML: no arbitrary tags; stick to b/code/br).
+HELP_SECTION_BODIES: dict[str, str] = {
+    "mon": (
+        "<b>Monitoring</b>\n\n"
+        "<code>/status</code> overview\n"
+        "<code>/cpu</code> <code>/ram</code> <code>/disk</code>\n"
+        "<code>/temps</code> <code>/network</code> <code>/uptime</code>\n"
+        "<code>/health</code> score\n"
+        "<code>/smart</code> <code>/drives</code> SMART\n"
+        "<code>/hdddetail</code> HDD detail + samples"
+    ),
+    "dock": (
+        "<b>Docker · storage</b>\n\n"
+        "<code>/docker</code> dashboard (df, counts, table)\n"
+        "<code>/containers</code> compact list + CPU/RAM\n"
+        "<code>/dscan</code> full scan · <code>/dhealth</code> report\n"
+        "<code>/dclean</code> · <code>/dprune</code> · <code>/daggressive</code>\n"
+        "<code>/dimages</code> · <code>/dbigfiles</code> · <code>/dlogs</code>\n"
+        "<code>/dstart</code> · <code>/drestart</code> · "
+        "<code>/dstop</code> · <code>/dtail</code>"
+    ),
+    "files": (
+        "<b>Files</b>\n\n"
+        "<code>/files</code> browse docs path\n"
+        "<code>/ls</code> <code>[path]</code> · <code>/ls --all</code>\n"
+        "<code>/find</code> · <code>/tree</code> · <code>/storage</code>\n"
+        "<code>/download</code> · <code>/uploadfile</code>\n"
+        "<code>/cd</code> (root session)"
+    ),
+    "ai": (
+        "<b>AI</b>\n\n"
+        "<code>/ask</code> docs (RAG) · <code>/chat</code>\n"
+        "<code>/summarize</code> · <code>/explain</code>\n"
+        "<code>/analyze</code> · <code>/think</code>\n"
+        "<code>/websearch</code> · <code>/index</code>\n"
+        "<code>/clear</code> · <code>/cancel</code> pending prompts"
+    ),
+    "srv": (
+        "<b>Services · host</b>\n\n"
+        "<code>/services</code> · <code>/restart_service</code>\n"
+        "<code>/reboot</code> · <code>/shutdown</code>\n"
+        "<code>/updates</code> · <code>/omv_updates</code> · <code>/upgrade</code>\n"
+        "<code>/rootlogin</code> · <code>/rootstatus</code> · "
+        "<code>/rootlogout</code> · <code>/ssh</code>"
+    ),
+}
+
+_HELP_KEYBOARD = InlineKeyboardMarkup(
+    [
+        [
+            InlineKeyboardButton("Monitoring", callback_data="help:mon"),
+            InlineKeyboardButton("Docker · storage", callback_data="help:dock"),
+        ],
+        [
+            InlineKeyboardButton("Files", callback_data="help:files"),
+            InlineKeyboardButton("AI", callback_data="help:ai"),
+        ],
+        [InlineKeyboardButton("Services · host", callback_data="help:srv")],
+    ]
+)
+
+
+def _help_user_allowed(user_id: int) -> bool:
+    if not config.ALLOWED_USER_IDS:
+        return True
+    return user_id in config.ALLOWED_USER_IDS
 
 
 @require_auth
@@ -17,7 +87,7 @@ logger = logging.getLogger(__name__)
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command - Welcome message."""
     user = update.effective_user
-    
+
     welcome_msg = f"""
 👋 **Welcome to NAS AI Assistant, {user.first_name}!**
 
@@ -27,7 +97,7 @@ I'm your private DevOps and AI assistant for managing your NAS. I can help you w
 Monitor CPU, RAM, disk, temperatures, and system health
 
 🐳 **Docker Management**
-Control and monitor your Docker containers
+Dashboard, storage scans, and container control
 
 📁 **File System**
 Browse, search, and manage files safely
@@ -42,105 +112,55 @@ Search the internet for current information
 📊 **Alerts**
 Automatic notifications for system issues
 
-Use /help to see all available commands.
+Use /help for a compact guide (full lists under the buttons).
 """
-    
-    await update.message.reply_text(welcome_msg, parse_mode='Markdown')
+    await update.message.reply_text(welcome_msg, parse_mode="Markdown")
     logger.info(f"User {user.id} started the bot")
 
 
 @require_auth
 @rate_limit
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /help command - Show all available commands."""
-    
-    help_msg = """
-📚 **Available Commands**
+    """Short /help + category buttons (details on tap)."""
+    intro = (
+        "<b>NAS Assistant</b>\n"
+        "Monitoring, Docker, files, and AI in one place.\n\n"
+        "<b>Tip:</b> type <code>/</code> — Telegram shows every command with a short hint.\n\n"
+        "<b>Highlights</b>\n"
+        "• <code>/status</code> · <code>/docker</code> · <code>/containers</code>\n"
+        "• <code>/ls</code> · <code>/ask</code> · <code>/services</code>\n\n"
+        "<i>Tap a category below for the full command list.</i>"
+    )
+    await update.message.reply_text(
+        intro,
+        parse_mode=ParseMode.HTML,
+        reply_markup=_HELP_KEYBOARD,
+        disable_web_page_preview=True,
+    )
+    logger.info("Help command used by user %s", update.effective_user.id)
 
-**📊 Monitoring**
-`/status` - Comprehensive system overview
-`/cpu` - CPU usage and load
-`/ram` - Memory statistics
-`/disk` - Disk usage
-`/temps` - Temperature sensors
-`/network` - Network statistics
-`/uptime` - System uptime
-`/health` - System health score
-`/smart` - Drive health (SMART data)
-`/drives` - List all drives
-`/hdddetail` - HDD details: power/spin counters, hdparm state, sample history
 
-**🐳 Docker & storage**
-`/docker` — List Docker containers (CPU/RAM where available)
-`/containers` — Same as `/docker`
-`/ddocker` — Docker dashboard (system df + service state)
-`/dscan` - Full Docker + disk scan
-`/dclean` - Safe cleanup (confirm)
-`/dprune` - Quick dangling prune
-`/daggressive` - Aggressive cleanup (2-step confirm)
-`/dimages` - List images (unused/dangling)
-`/dbigfiles` - Largest files (allowlisted paths)
-`/dlogs` - Huge log files
-`/dhealth` - NAS + Docker health report
-`/dstart` / `/drestart` / `/dstop` / `/dtail` - Container control
+async def help_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Inline keyboard under /help — send one category block."""
+    query = update.callback_query
+    if not query or not query.data or not query.data.startswith("help:"):
+        return
 
-**📁 File System**
-`/files` - Browse default document path
-`/ls [path]` - List directory with numbered files
-`/ls --all` - Show all folders (including hidden)
-`/download <number>` - Download single file
-`/download 1-3 7` - Bulk download as ZIP
-`/uploadfile [subfolder]` - Upload file (requires root)
-`/find <filename>` - Search for files
-`/tree [path]` - Show directory tree
-`/storage` - Storage usage summary
-`/cd <path>` - Change working directory (requires root)
-`/cd root` - Go to disk root (requires root)
-`/cd` - Show current directory
+    user = query.from_user
+    if not _help_user_allowed(user.id):
+        await query.answer("Unauthorized.", show_alert=True)
+        return
 
-**⚙️ Services**
-`/services` - List system services
-`/restart_service <name>` - Restart a service
-`/reboot` - Reboot the system (requires confirmation)
-`/shutdown` - Shutdown the system (requires confirmation)
+    key = query.data.replace("help:", "", 1)
+    body = HELP_SECTION_BODIES.get(key)
+    if not body:
+        await query.answer()
+        return
 
-**🤖 AI Assistant**
-`/ask <question>` - Ask about your documents (RAG)
-`/chat <message>` - General AI chat
-`/summarize <topic>` - Summarize documents
-`/explain <term>` - Explain from documents
-`/analyze <text>` - Deep analysis (uses o1-mini)
-`/think <question>` - Complex reasoning
-`/websearch <query>` - Search the internet
-`/index` - Re-index documents (admin only)
-`/clear` - Clear conversation history
-`/cancel` - Cancel when the bot is waiting for your next message (after /analyze, /ask, etc.)
-
-**🔐 Root Access**
-`/rootlogin <password>` - Temporary root access (30min)
-`/rootstatus` - Check root session status
-`/rootlogout` - End root session
-`/ssh <command>` - Execute shell commands (requires root)
-`/cd <path>` - Navigate to any directory (requires root)
-
-**ℹ️ General**
-`/start` - Welcome message
-`/help` - Show this help message
-
-**💡 Tips:**
-• Follow-up questions work naturally - I remember context!
-• After /cpu, you can ask "why is it high?"
-• After /docker, you can say "restart the first one"
-• Use /clear to start a fresh conversation
-
-**📁 File Management Tips:**
-• `/ls` uses your working directory (set with /cd)
-• `/cd root` → `/ls` shows: documents/, media/, photos/, tutorials/
-• `/ls --all` reveals hidden system folders at disk root
-• `/download 1-3 5-7` downloads files 1,2,3,5,6,7 as ZIP
-• Cache expires after 10 minutes, re-run /ls if needed
-• Root access grants full file system access - use with caution!
-"""
-    
-    await update.message.reply_text(help_msg, parse_mode='Markdown')
-    logger.info(f"Help command used by user {update.effective_user.id}")
+    await query.answer()
+    if query.message:
+        await query.message.reply_text(
+            body,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
+        )

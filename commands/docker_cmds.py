@@ -16,6 +16,7 @@ from utils.followup_state import (
     FOLLOWUP_DOCKER_LOGS,
 )
 from utils.telegram_reply import reply_text_chunked
+from commands import docker_storage_cmds
 from services.docker_service import (
     list_containers,
     restart_container,
@@ -65,7 +66,7 @@ async def list_docker_containers_view(
     *,
     command_tag: str,
 ) -> None:
-    """Classic container listing (shared by /docker and /containers)."""
+    """Markdown container listing with CPU/RAM (used by /containers)."""
     user_id = update.effective_user.id
     await update.message.reply_text("🐳 Listing Docker containers…")
     try:
@@ -86,14 +87,14 @@ async def list_docker_containers_view(
 @require_auth
 @rate_limit
 async def docker_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """List Docker containers. Use /ddocker for the storage dashboard."""
-    await list_docker_containers_view(update, context, command_tag="/docker")
+    """Docker HTML dashboard (disk summary, counts, container table)."""
+    await docker_storage_cmds.docker_dashboard(update, context)
 
 
 @require_auth
 @rate_limit
 async def containers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Same listing as /docker (legacy alias)."""
+    """Simple Markdown container list (CPU/RAM when available)."""
     await list_docker_containers_view(update, context, command_tag="/containers")
 
 

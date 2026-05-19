@@ -86,7 +86,7 @@ docker exec nas-telegram-bot curl -sS -X POST http://127.0.0.1:18765/notify \
 - Automated alerts (disk, CPU, memory, temperature, SMART, container crashes)
 
 ### Docker Management
-- List containers with CPU/RAM usage (`/docker`)
+- Dashboard + storage tools (`/docker`), compact list (`/containers`)
 - Start, stop, restart containers
 - View logs (`/logs`)
 - Requires Docker socket access (mounted in `docker-compose.yml`)
@@ -191,7 +191,7 @@ Use `/help` in Telegram for the full list. Highlights:
 | Category | Commands |
 |----------|----------|
 | Monitoring | `/status`, `/cpu`, `/ram`, `/disk`, `/temps`, `/network`, `/uptime`, `/health`, `/smart`, `/drives` |
-| Docker | `/docker`, `/restart`, `/stop`, `/start`, `/logs` |
+| Docker | `/docker`, `/containers`, `/dstart`, `/drestart`, `/dstop`, `/dtail`, … |
 | Files | `/files`, `/ls`, `/download`, `/uploadfile`, `/find`, `/tree`, `/storage` |
 | AI | `/ask`, `/chat`, `/summarize`, `/explain`, `/analyze`, `/think`, `/websearch`, `/index`, `/clear` |
 | Root | `/rootlogin`, `/rootstatus`, `/rootlogout`, `/ssh` |

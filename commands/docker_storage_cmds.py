@@ -49,9 +49,8 @@ def _volume_count() -> int:
         return 0
 
 
-@require_auth
-@rate_limit
-async def ddocker_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def docker_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Docker HTML dashboard (/docker). Authorized + rate-limited by the caller."""
     user_id = update.effective_user.id
     await reply_text_safe(update, "🐳 Loading Docker dashboard…", **_kw)
     try:
@@ -66,9 +65,9 @@ async def ddocker_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             df.stdout, running, stopped, len(images), vols, docker_state, raw
         )
         await reply_text_chunked(update, msg, **_kw)
-        await save_command(user_id, "/ddocker", "dashboard")
+        await save_command(user_id, "/docker", "dashboard")
     except Exception as e:
-        logger.exception("ddocker_command")
+        logger.exception("docker_dashboard")
         await reply_text_safe(update, format_error_html(str(e)), **_kw)
 
 

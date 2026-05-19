@@ -65,9 +65,8 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("smart", "Drive SMART"),
     BotCommand("drives", "Same as SMART"),
     BotCommand("hdddetail", "HDD SMART + spin history"),
-    BotCommand("docker", "Docker container list"),
-    BotCommand("containers", "Docker container list"),
-    BotCommand("ddocker", "Docker dashboard"),
+    BotCommand("docker", "Docker dashboard"),
+    BotCommand("containers", "Container list (compact)"),
     BotCommand("dscan", "Docker storage scan"),
     BotCommand("dclean", "Safe Docker cleanup"),
     BotCommand("dprune", "Quick Docker prune"),
@@ -168,6 +167,12 @@ def main():
     # Register command handlers - Basic
     application.add_handler(CommandHandler("start", basic.start_command))
     application.add_handler(CommandHandler("help", basic.help_command))
+    application.add_handler(
+        CallbackQueryHandler(
+            basic.help_category_callback,
+            pattern=r"^help:(mon|dock|files|ai|srv)$",
+        )
+    )
     application.add_handler(CommandHandler("cancel", ai_cmds.cancel_pending_command))
 
     # Plain-text follow-up for /ask, /restart without args (menu tap), etc.
@@ -202,7 +207,6 @@ def main():
     application.add_handler(CommandHandler("dstop", docker_cmds.dstop_command))
     application.add_handler(CommandHandler("dtail", docker_cmds.dtail_command))
     # Docker + storage management
-    application.add_handler(CommandHandler("ddocker", docker_storage_cmds.ddocker_command))
     application.add_handler(CommandHandler("dscan", docker_storage_cmds.dscan_command))
     application.add_handler(CommandHandler("dclean", docker_storage_cmds.dclean_command))
     application.add_handler(CommandHandler("daggressive", docker_storage_cmds.daggressive_command))
