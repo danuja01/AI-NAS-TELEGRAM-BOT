@@ -49,6 +49,7 @@ Telegram confirmations; tell users to run the command themselves when a confirma
 - `/cd` — Print or change working directory (root session for full paths)
 
 ## AI and documents
+- In a **private chat** with the bot, a normal text line (no `/`) is treated like **`/chat`**, unless the wording matches deep-analysis intent (then same as **`/analyze`**).
 - `/ask` — RAG question over indexed documents
 - `/chat` — Chat with tools (live Docker/system reads when needed)
 - `/summarize` — Summarize a topic from documents

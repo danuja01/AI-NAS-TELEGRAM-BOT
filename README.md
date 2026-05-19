@@ -107,6 +107,7 @@ docker exec nas-telegram-bot curl -sS -X POST http://127.0.0.1:18765/notify \
 
 ### AI Assistant (RAG)
 - Document Q&A from your files (`/ask`) — PDF, DOCX, TXT, MD
+- In **private** chats, a **normal text message** (no `/command`) runs the same pipeline as **`/chat`** so you can talk to the assistant without typing `/chat`. Phrases that ask for deep reasoning (e.g. “please think about…”, “analyze this…”, “think deeply…”, or a line starting with `think:` / `analyze:`) use the **`/analyze`** pipeline instead
 - **`/chat`, `/analyze`, and `/ask`** can use **read-only tools** (temperature sensors, health score, disk mounts, network counters, SMART summary, systemd services, paths from `ALLOWED_PATHS`, Docker list/logs/unhealthy, plus a combined snapshot) so the model answers with live data instead of guessing; a built-in command catalog is always included in context
 - Conversation history (last 10 messages) for natural follow-ups
 - Internet search with AI summary (`/websearch`)

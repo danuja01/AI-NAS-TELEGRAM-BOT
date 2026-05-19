@@ -5,10 +5,22 @@ Safe Telegram reply helpers: effective_message and Markdown/HTML fallbacks.
 import logging
 from typing import Any, List, Optional
 
-from telegram import Update
+from telegram import Message, Update
 from telegram.error import BadRequest
 
 logger = logging.getLogger(__name__)
+
+
+async def delete_message_safe(message: Message | None) -> None:
+    """Delete a bot message (e.g. transient status); ignore permission or gone errors."""
+    if message is None:
+        return
+    try:
+        await message.delete()
+    except BadRequest as e:
+        logger.debug("delete_message_safe: %s", e)
+    except Exception as e:
+        logger.debug("delete_message_safe: %s", e)
 
 # https://core.telegram.org/method/messages.sendMessage
 TELEGRAM_MESSAGE_MAX_CHARS = 4096

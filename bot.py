@@ -175,7 +175,7 @@ def main():
     )
     application.add_handler(CommandHandler("cancel", ai_cmds.cancel_pending_command))
 
-    # Plain-text follow-up for /ask, /restart without args (menu tap), etc.
+    # Plain-text follow-up for /ask without args, implicit /chat in private, etc.
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
