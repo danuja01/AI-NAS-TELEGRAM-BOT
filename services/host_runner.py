@@ -305,3 +305,13 @@ def format_host_result_html(title: str, result: HostExecResult) -> str:
         lines.append("<b>stderr</b>")
         lines.append(f"<pre>{escape_telegram_html(err)}</pre>")
     return "\n".join(lines)
+
+
+def validate_readonly_scan_path(path: str) -> bool:
+    """True if ``path`` is under configured STORAGE_SCAN_PATHS (for agent gate)."""
+    return _validate_scan_path(path)
+
+
+def validate_readonly_systemd_unit(unit: str) -> bool:
+    """True if ``unit`` is allowed for read-only systemctl/journal host profiles."""
+    return _validate_journal_or_systemctl_unit(unit)

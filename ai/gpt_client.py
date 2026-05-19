@@ -135,6 +135,7 @@ async def generate_with_tools_loop(
     max_tokens: int = 3500,
     max_tool_rounds: int | None = None,
     telegram_bindings: AgentTelegramBindings | None = None,
+    nas_tools_for_rag: bool = False,
 ) -> str:
     """
     Chat completion with read-only NAS/Docker tools (function calling).
@@ -146,10 +147,17 @@ async def generate_with_tools_loop(
     if system_prompt is None:
         _ro_tools = ""
         if config.AGENT_HOST_READONLY_TOOL:
-            _ro_tools = (
-                " **nas_host_readonly_profile** calls allow-listed read-only host diagnostics via SSH/nsenter (not arbitrary shell); "
-                "it does **not** replace **`/ssh`**. "
-            )
+            if getattr(config, "AGENT_HOST_READONLY_EVALUATOR_MODE", False):
+                _ro_tools = (
+                    " **nas_host_read_request** sends short natural-language read intents through a **separate** "
+                    "JSON-only evaluator (no RAG document access) that maps to the same fixed read-only host profiles "
+                    "as the manual enum tool — not arbitrary shell; it does **not** replace **`/ssh`**. "
+                )
+            else:
+                _ro_tools = (
+                    " **nas_host_readonly_profile** calls allow-listed read-only host diagnostics via SSH/nsenter "
+                    "(not arbitrary shell); it does **not** replace **`/ssh`**. "
+                )
         system_prompt = (
             "You are a concise technical assistant for a NAS Telegram bot. "
             "You have tools for THIS host: temperatures, health score, disks, network, SMART, "
@@ -180,7 +188,7 @@ async def generate_with_tools_loop(
         create_kwargs: Dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "tools": get_nas_agent_tools(),
+            "tools": get_nas_agent_tools(for_rag=nas_tools_for_rag),
             "tool_choice": "auto",
             "max_completion_tokens": max_tokens,
         }

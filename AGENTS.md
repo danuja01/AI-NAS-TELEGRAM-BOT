@@ -20,6 +20,8 @@ Set `HOST_EXEC_MODE=none` in `.env` to disable NAS host commands (nsenter/SSH) w
 
 Read-only **OpenMediaVault** storage views use host `omv-rpc` when host exec is enabled (`OMV_RPC_USER`, `OMV_RPC_ENABLED` in `.env`).
 
+Optional **AI host read evaluator**: set `AGENT_HOST_READONLY_EVALUATOR_MODE=true` (with `AGENT_HOST_READONLY_TOOL=true`) so `/ask` can use `nas_host_read_request` — a second JSON-only model call maps natural language to the same fixed `host_runner` profiles; execution still never runs arbitrary shell from the model.
+
 ### Dependencies
 
 - Python 3.12 with `python3.12-venv` and `python3.12-dev` (needed to build `chroma-hnswlib` C++ extension)
