@@ -1,0 +1,20 @@
+# Smoke-test Docker build on every push and on PRs whose base branch is main.
+# Repo root is the bot project (Dockerfile at top level).
+name: Docker Image CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the Docker image
+        run: |
+          docker build . \
+            --file Dockerfile \
+            --tag nas-telegram-bot:${{ github.event_name }}-${{ github.sha }}
