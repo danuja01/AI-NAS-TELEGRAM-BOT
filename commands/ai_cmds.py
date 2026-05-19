@@ -85,7 +85,7 @@ async def execute_ask(update: Update, context: ContextTypes.DEFAULT_TYPE, user_i
             )
             return
 
-        status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
+        status_msg = await update.message.reply_text("💬 Thinking...")
 
         answer = await ask(
             question,
@@ -118,7 +118,7 @@ async def execute_chat(
 ):
     status_msg = None
     try:
-        status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
+        status_msg = await update.message.reply_text("💬 Thinking...")
 
         conv_context = await ConversationManager.format_for_rag(user_id, limit=5)
         full_ctx_parts = [f"## Bot command reference\n{BOT_COMMAND_CATALOG}"]
@@ -174,7 +174,7 @@ async def execute_summarize(
             )
             return
 
-        status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
+        status_msg = await update.message.reply_text("💬 Thinking...")
 
         bind = AgentTelegramBindings(update, context, user_id)
         answer = await ask(
@@ -207,7 +207,7 @@ async def execute_explain(update: Update, context: ContextTypes.DEFAULT_TYPE, us
             )
             return
 
-        status_msg = await update.message.reply_text("💬 Thinking (may query Docker/host)...")
+        status_msg = await update.message.reply_text("💬 Thinking...")
 
         answer = await ask(
             f"Explain what '{term}' means",
