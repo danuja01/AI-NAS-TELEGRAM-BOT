@@ -47,7 +47,7 @@ _SMART_DEVICE_RE = re.compile(
 )
 
 from ai.host_read_profiles import HOST_READONLY_PROFILES, HOST_READONLY_PROFILES_ORDERED
-from services.host_runner_readonly import extended_readonly_profile_names
+from services.readonly import ZERO_EXTRA_AGENT_PROFILES
 
 _MAX_SERVICES = 45
 _MAX_SMART_DRIVES = 12
@@ -79,8 +79,7 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
         "Read-only host diagnostics on the OMV/NAS machine via SSH or nsenter (same pipeline as HOST_EXEC_MODE). "
         "**Not** arbitrary shell — only fixed allowlisted profiles (apt/reboot/systemd/journal, du/find under scan paths, "
         "and many fixed argv probes: hostname, uptime, memory/cpu/disk/network summaries, docker/kubectl/helm read-only, "
-        "printenv, bounded ping (HOST_READONLY_PING_HOST), grep -F on scan paths (HOST_READONLY_GREP_KEYWORDS), "
-        "bounded tail -f via timeout, omv-salt stage run, etc.). "
+        "bounded tail -f (timeout), loopback ping, grep -F on scan paths with fixed keywords only, etc.). "
         "Paths for file/dir probes must be under STORAGE_SCAN_PATHS. "
         "Units default to MONITOR_SYSTEMD_UNITS; set HOST_READONLY_SYSTEMD_ANY_UNIT=true to allow other valid unit names. "
         "Requires AGENT_HOST_READONLY_TOOL=true at boot. Does **not** replace `/ssh` (root-session shell)."
@@ -103,7 +102,8 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
             "type": "string",
             "description": (
                 "Absolute path under STORAGE_SCAN_PATHS. Required for du_path, find_large_files, host_ls_la, host_du_sh, "
-                "host_stat_file, host_file_cmd, host_readlink, host_realpath, host_file_head, host_file_tail."
+                "host_stat_file, host_file_cmd, host_readlink, host_realpath, host_file_head, host_file_tail, "
+                "host_grep_scan, host_tail_follow_scan."
             ),
         },
         "min_mb": {
@@ -127,8 +127,8 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
         "grep_keyword": {
             "type": "string",
             "description": (
-                "Fixed substring for host_grep_scan; must be one of HOST_READONLY_GREP_KEYWORDS from server config "
-                "(not a regex; passed as grep -F)."
+                "Fixed substring for host_grep_scan (grep -F): must be an allowlisted diagnostic phrase "
+                "defined in server code, not a regex."
             ),
         },
     },
@@ -382,9 +382,7 @@ def _exec_host_readonly_profile(user_id: Optional[int], args: Dict[str, Any]) ->
         if not path:
             return json.dumps({"ok": False, "error": "parameter 'path' is required for host_tail_follow_scan"})
         extra = [path]
-    elif profile in ("apt_list_upgradable", "reboot_required", "systemctl_failed"):
-        extra = []
-    elif profile in extended_readonly_profile_names():
+    elif profile in ZERO_EXTRA_AGENT_PROFILES:
         extra = []
     else:
         return json.dumps({"ok": False, "error": f"unsupported profile routing: {profile}"})

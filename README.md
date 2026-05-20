@@ -61,9 +61,6 @@ For OpenMediaVault / Debian **host** actions from the bot, the container should 
 | `OMV_RPC_USER` | User passed to `omv-rpc -u` (default `admin`) |
 | `OMV_RPC_ENABLED` | `true`/`false` — disable all OMV RPC reads from the bot |
 | `AGENT_HOST_READONLY_TOOL` | When `true`, AI tools may trigger read-only host profiles (SSH/nsenter) via fixed enum `nas_host_readonly_profile`. |
-| `HOST_READONLY_PING_HOST` | Target for `host_ping` (IP or hostname; default `127.0.0.1`). |
-| `HOST_READONLY_TAIL_F_SECONDS` | Seconds for `timeout … tail -f` in `host_tail_follow_scan` (default `20`, max `90`). |
-| `HOST_READONLY_GREP_KEYWORDS` | Comma-separated fixed strings for `host_grep_scan` (grep `-F`); default includes `error`, `warn`, `fail`, etc. |
 
 **Telegram commands:** `/updates` (apt refresh + upgradable list), `/omv_updates` (same + OMV note), `/upgrade` (confirm, then **`omv-upgrade`** on host; long-running).
 
