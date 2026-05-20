@@ -1,16 +1,30 @@
 """
-Extended read-only host command profiles (fixed argv, no shell).
+Allowlisted host command profiles for the AI ``nas_host_readonly_profile`` tool.
 
-Path-based operations only accept prefixes in ``config.STORAGE_SCAN_PATHS``
-(same rule as ``du_path`` / ``find_large_files``). Fixed paths like ``/etc/fstab``
-are embedded in argv literals — never from user-controlled strings.
+Execution uses **fixed argv lists** (no shell). Path-based operations only accept
+prefixes in ``config.STORAGE_SCAN_PATHS``. Literals such as ``/etc/fstab`` are
+embedded in code, never from user-controlled strings.
+
+**Split vs ``host_runner.run_profile``:** The first seven names in
+``HOST_READONLY_PROFILES_LEGACY_IN_RUNNER`` are implemented directly in
+``host_runner.py`` (historical paths: apt, reboot banner, systemd journal/is-active,
+``du``/``find`` on scan roots). Everything else in this module is built here so
+``run_profile`` stays a thin dispatcher.
+
+**Owner-requested profiles** (``grep``, ``tail -f``, ``printenv``, ``ping``,
+``omv-salt stage run``): ``grep`` only allows fixed substrings from
+``HOST_READONLY_GREP_KEYWORDS``; ``tail -f`` is wrapped in GNU ``timeout``;
+``ping`` uses ``HOST_READONLY_PING_HOST`` only (not free-form model text).
+``printenv`` and ``omv-salt stage run`` are fixed argv — they can still expose secrets
+or change Salt state depending on your OMV setup; enable only when you accept that risk.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
-from typing import List, Optional, Tuple
+from typing import Final, FrozenSet, List, Optional, Tuple
 
 import config
 
@@ -20,6 +34,20 @@ _SCAN_PATH_RE = re.compile(r"^/[a-zA-Z0-9_./-]+$")
 _DOCKER_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,253}$")
 _GENERIC_SYSTEMD_UNIT_RE = re.compile(r"^[a-zA-Z0-9:@_.\-\\]{1,240}$")
 _UNIT_RE = re.compile(r"^[a-zA-Z0-9_.@-]+$")
+_PING_HOSTNAME_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9.-]{0,251}[a-zA-Z0-9])?$")
+
+# Profiles whose argv is built in ``services.host_runner.run_profile`` (not here).
+HOST_READONLY_PROFILES_LEGACY_IN_RUNNER: Final[FrozenSet[str]] = frozenset(
+    {
+        "apt_list_upgradable",
+        "reboot_required",
+        "systemctl_is_active",
+        "journal_tail",
+        "systemctl_failed",
+        "du_path",
+        "find_large_files",
+    }
+)
 
 
 def _validate_scan_path(path: str) -> bool:
@@ -63,6 +91,20 @@ def validate_readonly_docker_name(name: str) -> bool:
     return _validate_docker_name((name or "").strip())
 
 
+def _validate_ping_target(host: str) -> bool:
+    h = (host or "").strip()
+    if not h or len(h) > 253:
+        return False
+    try:
+        ipaddress.ip_address(h)
+        return True
+    except ValueError:
+        pass
+    if any(c in h for c in " \t\n\r;$()`|&<>\"'\\"):
+        return False
+    return bool(_PING_HOSTNAME_RE.fullmatch(h))
+
+
 # (argv, max_timeout_seconds cap for subprocess)
 _READONLY_FIXED: dict[str, tuple[list[str], int]] = {
     "host_hostname": (["hostname"], 15),
@@ -74,6 +116,7 @@ _READONLY_FIXED: dict[str, tuple[list[str], int]] = {
     "host_date": (["date"], 15),
     "host_timedatectl": (["timedatectl", "status"], 25),
     "host_pwd": (["pwd"], 15),
+    "host_printenv": (["printenv"], 30),
     "host_last_n": (["last", "-n", "40"], 25),
     "host_lastlog": (["lastlog"], 45),
     "host_w": (["w"], 20),
@@ -130,6 +173,7 @@ _READONLY_FIXED: dict[str, tuple[list[str], int]] = {
         45,
     ),
     "systemctl_list_timers": (["systemctl", "list-timers", "--all", "--no-pager"], 35),
+    "omv_salt_stage_run": (["omv-salt", "stage", "run"], 300),
 }
 
 
@@ -144,12 +188,20 @@ def extended_readonly_profile_names() -> frozenset[str]:
             "host_file_cmd",
             "host_readlink",
             "host_realpath",
+            "host_grep_scan",
+            "host_tail_follow_scan",
+            "host_ping",
             "systemctl_status",
             "systemctl_is_enabled",
             "docker_cli_inspect",
             "docker_cli_logs_tail",
         }
     )
+
+
+def all_agent_host_readonly_names() -> frozenset[str]:
+    """Every profile name the agent may pass to ``host_runner.run_profile`` (legacy + this module)."""
+    return HOST_READONLY_PROFILES_LEGACY_IN_RUNNER | extended_readonly_profile_names()
 
 
 def build_readonly_extended_inner(
@@ -163,6 +215,15 @@ def build_readonly_extended_inner(
             return None, "this profile takes no extra arguments", None
         argv, cap = _READONLY_FIXED[profile]
         return list(argv), None, cap
+
+    if profile == "host_ping":
+        if extra_args:
+            return None, "host_ping takes no arguments (set HOST_READONLY_PING_HOST in .env)", None
+        host = getattr(config, "HOST_READONLY_PING_HOST", "127.0.0.1") or "127.0.0.1"
+        host = str(host).strip()
+        if not _validate_ping_target(host):
+            return None, "invalid HOST_READONLY_PING_HOST in configuration", None
+        return ["ping", "-c", "4", "-W", "5", host], None, 35
 
     if profile in ("systemctl_status", "systemctl_is_enabled"):
         if len(extra_args) != 1:
@@ -206,6 +267,26 @@ def build_readonly_extended_inner(
         if profile == "host_readlink":
             return ["readlink", "-f", path], None, 15
         return ["realpath", path], None, 15
+
+    if profile == "host_grep_scan":
+        if len(extra_args) != 2:
+            return None, "host_grep_scan requires path and grep_keyword (fixed allowlist only)", None
+        path, needle = extra_args[0], (extra_args[1] or "").strip()
+        if not _validate_scan_path(path):
+            return None, "invalid or disallowed path for host_grep_scan", None
+        allowed = getattr(config, "HOST_READONLY_GREP_KEYWORDS", ()) or ()
+        if needle not in allowed:
+            return None, "grep_keyword not in HOST_READONLY_GREP_KEYWORDS allowlist", None
+        return ["grep", "-nI", "-F", needle, path], None, 50
+
+    if profile == "host_tail_follow_scan":
+        if len(extra_args) != 1 or not _validate_scan_path(extra_args[0]):
+            return None, "invalid or disallowed path for host_tail_follow_scan", None
+        path = extra_args[0]
+        sec = int(getattr(config, "HOST_READONLY_TAIL_F_SECONDS", 20))
+        sec = max(5, min(sec, 90))
+        cap = sec + 10
+        return ["timeout", "--signal=TERM", str(sec), "tail", "-f", "-n", "80", path], None, cap
 
     if profile == "docker_cli_inspect":
         if len(extra_args) != 1:

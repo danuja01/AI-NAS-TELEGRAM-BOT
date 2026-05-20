@@ -70,12 +70,6 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 # When True, expose nas_host_readonly_profile to /chat /analyze /ask agent (allowlisted host reads via host_runner).
 AGENT_HOST_READONLY_TOOL = _env_bool("AGENT_HOST_READONLY_TOOL", False)
-# When True, replace enum tool with nas_host_read_request: a second LLM maps natural language to the same fixed profiles.
-AGENT_HOST_READONLY_EVALUATOR_MODE = _env_bool("AGENT_HOST_READONLY_EVALUATOR_MODE", False)
-# If True with evaluator mode: /ask (RAG) gets nas_host_read_request only; /chat keeps nas_host_readonly_profile enum.
-AGENT_HOST_READ_EVALUATOR_RAG_ONLY = _env_bool("AGENT_HOST_READ_EVALUATOR_RAG_ONLY", False)
-# Model for the host-read evaluator (empty = DEFAULT_MODEL). Use a small fast model recommended.
-HOST_READ_EVALUATOR_MODEL = os.getenv("HOST_READ_EVALUATOR_MODEL", "").strip()
 
 # After startup: re-index RAG documents and message ALLOWED_USER_IDS (good after new deploy).
 AUTO_INDEX_ON_START = _env_bool("AUTO_INDEX_ON_START", False)
@@ -197,6 +191,19 @@ STORAGE_SCAN_PATHS = [
     for p in os.getenv("STORAGE_SCAN_PATHS", _default_scan_paths).split(",")
     if p.strip()
 ]
+
+# host_runner_readonly: bounded ping / tail -f / grep (fixed argv; see services/host_runner_readonly.py).
+HOST_READONLY_PING_HOST = os.getenv("HOST_READONLY_PING_HOST", "127.0.0.1").strip() or "127.0.0.1"
+HOST_READONLY_TAIL_F_SECONDS = int(os.getenv("HOST_READONLY_TAIL_F_SECONDS", "20"))
+_default_grep_kw = "error,warn,fail,Failed password,authentication failure"
+_grep_kw_env = os.getenv("HOST_READONLY_GREP_KEYWORDS", _default_grep_kw)
+HOST_READONLY_GREP_KEYWORDS = tuple(
+    x.strip() for x in _grep_kw_env.split(",") if x.strip() and len(x.strip()) <= 120
+)
+if not HOST_READONLY_GREP_KEYWORDS:
+    HOST_READONLY_GREP_KEYWORDS = tuple(
+        x.strip() for x in _default_grep_kw.split(",") if x.strip()
+    )
 
 
 # Validation

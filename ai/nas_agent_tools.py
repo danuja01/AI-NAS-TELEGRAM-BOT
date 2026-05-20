@@ -78,7 +78,9 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
     (
         "Read-only host diagnostics on the OMV/NAS machine via SSH or nsenter (same pipeline as HOST_EXEC_MODE). "
         "**Not** arbitrary shell — only fixed allowlisted profiles (apt/reboot/systemd/journal, du/find under scan paths, "
-        "and many fixed argv probes: hostname, uptime, memory/cpu/disk/network summaries, docker/kubectl/helm read-only, etc.). "
+        "and many fixed argv probes: hostname, uptime, memory/cpu/disk/network summaries, docker/kubectl/helm read-only, "
+        "printenv, bounded ping (HOST_READONLY_PING_HOST), grep -F on scan paths (HOST_READONLY_GREP_KEYWORDS), "
+        "bounded tail -f via timeout, omv-salt stage run, etc.). "
         "Paths for file/dir probes must be under STORAGE_SCAN_PATHS. "
         "Units default to MONITOR_SYSTEMD_UNITS; set HOST_READONLY_SYSTEMD_ANY_UNIT=true to allow other valid unit names. "
         "Requires AGENT_HOST_READONLY_TOOL=true at boot. Does **not** replace `/ssh` (root-session shell)."
@@ -122,48 +124,15 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
                 "Line count for host_file_head, host_file_tail, and docker_cli_logs_tail (optional; host_runner caps apply)."
             ),
         },
-    },
-    required=["profile"],
-)
-
-
-_NAS_HOST_READ_REQUEST_TOOL_ENTRY = _tool_entry(
-    "nas_host_read_request",
-    (
-        "Request a **read-only** host diagnostic on the NAS (SSH/nsenter) using natural language. "
-        "A **separate security evaluator** (no access to your RAG documents) maps this to one fixed "
-        "non-shell profile (same catalog as the enum tool). Execution only happens after that mapping "
-        "passes hard validation (paths under STORAGE_SCAN_PATHS, systemd unit policy). "
-        "Requires AGENT_HOST_READONLY_TOOL=true and AGENT_HOST_READONLY_EVALUATOR_MODE=true. "
-        "Does **not** run arbitrary commands and does **not** replace `/ssh`."
-    ),
-    {
-        "request_summary": {
+        "grep_keyword": {
             "type": "string",
             "description": (
-                "Short description of the read-only check (e.g. 'show pending apt upgrades', "
-                "'disk usage under /var/lib/docker', 'last 20 lines of nginx logs'). "
-                "Do not put shell commands here — only describe intent."
+                "Fixed substring for host_grep_scan; must be one of HOST_READONLY_GREP_KEYWORDS from server config "
+                "(not a regex; passed as grep -F)."
             ),
         },
-        "path_hint": {
-            "type": "string",
-            "description": "Optional absolute path hint for du/find (must still be under allowed scan roots).",
-        },
-        "unit_hint": {
-            "type": "string",
-            "description": "Optional systemd unit hint (e.g. nginx.service) for journal/status profiles.",
-        },
-        "min_mb_hint": {
-            "type": "integer",
-            "description": "Optional minimum file size in MiB for large-file find.",
-        },
-        "max_n_hint": {
-            "type": "integer",
-            "description": "Optional max file entries for large-file find.",
-        },
     },
-    required=["request_summary"],
+    required=["profile"],
 )
 
 
@@ -315,18 +284,7 @@ def get_nas_agent_tools(for_rag: bool = False) -> List[Dict[str, Any]]:
     out = list(_NAS_AGENT_TOOLS_BASE)
     if not config.AGENT_HOST_READONLY_TOOL:
         return out
-    rag_split = getattr(config, "AGENT_HOST_READ_EVALUATOR_RAG_ONLY", False)
-    eval_mode = getattr(config, "AGENT_HOST_READONLY_EVALUATOR_MODE", False)
-    if rag_split:
-        if for_rag and eval_mode:
-            out.append(_NAS_HOST_READ_REQUEST_TOOL_ENTRY)
-        elif not for_rag:
-            out.append(_NAS_HOST_READONLY_PROFILE_TOOL_ENTRY)
-        return out
-    if eval_mode:
-        out.append(_NAS_HOST_READ_REQUEST_TOOL_ENTRY)
-    else:
-        out.append(_NAS_HOST_READONLY_PROFILE_TOOL_ENTRY)
+    out.append(_NAS_HOST_READONLY_PROFILE_TOOL_ENTRY)
     return out
 
 
@@ -411,6 +369,19 @@ def _exec_host_readonly_profile(user_id: Optional[int], args: Dict[str, Any]) ->
                 extra.append(str(int(lc)))
             except (TypeError, ValueError):
                 return json.dumps({"ok": False, "error": "line_count must be an integer"})
+    elif profile == "host_grep_scan":
+        path = str(args.get("path", "")).strip()
+        kw = str(args.get("grep_keyword", "")).strip()
+        if not path:
+            return json.dumps({"ok": False, "error": "parameter 'path' is required for host_grep_scan"})
+        if not kw:
+            return json.dumps({"ok": False, "error": "parameter 'grep_keyword' is required for host_grep_scan"})
+        extra = [path, kw]
+    elif profile == "host_tail_follow_scan":
+        path = str(args.get("path", "")).strip()
+        if not path:
+            return json.dumps({"ok": False, "error": "parameter 'path' is required for host_tail_follow_scan"})
+        extra = [path]
     elif profile in ("apt_list_upgradable", "reboot_required", "systemctl_failed"):
         extra = []
     elif profile in extended_readonly_profile_names():
@@ -806,31 +777,6 @@ async def dispatch_nas_agent_tool(
     Run one agent tool. Interactive Docker tools require ``telegram_bind`` from a live chat handler.
     """
     args = arguments or {}
-    if function_name == "nas_host_read_request":
-        if not (
-            config.AGENT_HOST_READONLY_TOOL and getattr(config, "AGENT_HOST_READONLY_EVALUATOR_MODE", False)
-        ):
-            return json.dumps(
-                {
-                    "ok": False,
-                    "error": "nas_host_read_request disabled (need AGENT_HOST_READONLY_TOOL=true and "
-                    "AGENT_HOST_READONLY_EVALUATOR_MODE=true)",
-                }
-            )
-        from ai.host_read_gate import evaluate_natural_host_read_request
-
-        uid = telegram_bind.user_id if telegram_bind else None
-        summary = str(args.get("request_summary", ""))
-        hints = {
-            k: args.get(k)
-            for k in ("path_hint", "unit_hint", "min_mb_hint", "max_n_hint")
-            if args.get(k) is not None
-        }
-        resolved, err = await evaluate_natural_host_read_request(summary, hints)
-        if err:
-            return json.dumps({"ok": False, "error": err})
-        return await asyncio.to_thread(_exec_host_readonly_profile, uid, resolved)
-
     if function_name == "nas_host_readonly_profile":
         if not config.AGENT_HOST_READONLY_TOOL:
             return json.dumps(

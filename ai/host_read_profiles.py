@@ -1,18 +1,19 @@
 """
-Shared catalog of read-only host_runner profiles the agent may invoke (SSH/nsenter).
+Catalog of read-only ``host_runner.run_profile`` names exposed to the AI.
 
-The evaluator LLM may only map natural language to these names; execution never
-runs arbitrary shell from model text.
+The canonical set is ``all_agent_host_readonly_names()`` in
+``services/host_runner_readonly`` (legacy runner profiles + extended fixed-argv
+profiles). This module only defines **display order** for the OpenAI tool enum:
+original runner profiles first, then the rest sorted alphabetically.
 """
 
 from __future__ import annotations
 
 from typing import Final, FrozenSet, List
 
-from services.host_runner_readonly import extended_readonly_profile_names
+from services.host_runner_readonly import all_agent_host_readonly_names
 
-# Original allowlist (kept first for stable UX / docs); extended names follow alphabetically.
-_ORIGINAL_ORDERED: Final[List[str]] = [
+_LEGACY_FIRST: Final[List[str]] = [
     "apt_list_upgradable",
     "reboot_required",
     "systemctl_is_active",
@@ -22,11 +23,11 @@ _ORIGINAL_ORDERED: Final[List[str]] = [
     "find_large_files",
 ]
 
-_EXT_NAMES = extended_readonly_profile_names()
-_ORIG_SET = frozenset(_ORIGINAL_ORDERED)
+_ALL = all_agent_host_readonly_names()
+_LEGACY_SET = frozenset(_LEGACY_FIRST)
 
-HOST_READONLY_PROFILES_ORDERED: Final[List[str]] = _ORIGINAL_ORDERED + sorted(
-    _EXT_NAMES - _ORIG_SET,
+HOST_READONLY_PROFILES_ORDERED: Final[List[str]] = _LEGACY_FIRST + sorted(
+    _ALL - _LEGACY_SET,
     key=str,
 )
 HOST_READONLY_PROFILES: Final[FrozenSet[str]] = frozenset(HOST_READONLY_PROFILES_ORDERED)
