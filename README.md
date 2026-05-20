@@ -88,7 +88,7 @@ docker exec nas-telegram-bot curl -sS -X POST http://127.0.0.1:18765/notify \
 - Real-time CPU, RAM, disk, temperature, and network stats; optional **OpenMediaVault** filesystem and disk panels via host `omv-rpc` when the bot runs with host access (`HOST_EXEC_MODE`)
 - SMART drive health (`/smart`, `/drives`)
 - System health scoring (`/health`)
-- Tailscale IP detection
+- Per-interface network counters from the host (no Tailscale/VPN CLI from the bot)
 - Automated alerts (disk, CPU, memory, temperature, SMART, container crashes)
 
 ### Docker Management

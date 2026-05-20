@@ -22,6 +22,8 @@ Read-only **OpenMediaVault** storage views use host `omv-rpc` when host exec is 
 
 With `AGENT_HOST_READONLY_TOOL=true`, the AI may call **`nas_host_readonly_profile`**: a fixed enum of host commands (SSH/nsenter), not arbitrary shell.
 
+Recent `/chat`, `/analyze`, and `/ask` runs include **recent bot messages** in context: slash-command output (e.g. `/smart`) and **automated health/digest alerts** are saved to the conversation DB so follow-up questions like “is this alarming?” can refer to them.
+
 ### Dependencies
 
 - Python 3.12 with `python3.12-venv` and `python3.12-dev` (needed to build `chroma-hnswlib` C++ extension)

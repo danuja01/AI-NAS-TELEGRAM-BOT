@@ -120,7 +120,7 @@ async def execute_chat(
     try:
         status_msg = await update.message.reply_text("💬 Thinking...")
 
-        conv_context = await ConversationManager.format_for_rag(user_id, limit=5)
+        conv_context = await ConversationManager.format_for_rag(user_id, limit=None)
         full_ctx_parts = [f"## Bot command reference\n{BOT_COMMAND_CATALOG}"]
         if conv_context.strip():
             full_ctx_parts.append(f"## Recent conversation\n{conv_context}")
@@ -144,6 +144,9 @@ async def execute_chat(
                 "and **nas_request_docker_restart** / **nas_request_docker_stop** which post the same inline "
                 "Confirm/Cancel UI as /drestart and /dstop (nothing happens until the user taps Confirm). "
                 + _ro_chat
+                + "The `## Recent conversation` block may include the bot's earlier replies (slash commands like /smart "
+                "or automated health alerts). Treat that text as what the user is replying to. "
+                + "For **unused Docker images** or reclaimable image space, point users to `/dimages` or `/dscan`, not `/docker` (dashboard only). "
                 + "Whenever the user asks about their own machine, call read tools first and answer from data. "
                 "For bot slash commands (/drestart, /dimages), use monospace with one pair of Markdown backticks, "
                 "not bold/italic asterisks around commands. "
@@ -249,7 +252,7 @@ async def execute_analyze(
     try:
         status_msg = await update.message.reply_text("🧠 Analyzing (may query Docker/host)...")
 
-        conv_context = await ConversationManager.format_for_rag(user_id, limit=5)
+        conv_context = await ConversationManager.format_for_rag(user_id, limit=None)
         full_ctx_parts = [f"## Bot command reference\n{BOT_COMMAND_CATALOG}"]
         if conv_context.strip():
             full_ctx_parts.append(f"## Recent conversation\n{conv_context}")
@@ -270,6 +273,9 @@ async def execute_analyze(
             "systemd services, configured storage paths, Docker list/logs/unhealthy, snapshot, "
             "and **nas_request_docker_restart** / **nas_request_docker_stop** (same inline Confirm/Cancel as /drestart /dstop). "
             + _ro_analyze
+            + "The `## Recent conversation` block may include the bot's earlier replies (slash commands or automated alerts); "
+            "use it as ground truth for follow-up questions. "
+            + "For **unused Docker images** or reclaimable image space, point users to `/dimages` or `/dscan`, not `/docker` (dashboard only). "
             + "For questions about this NAS, call tools first and reason from the data. "
             + "Never use markdown pipe tables; use bullet lists with bold names. "
             "For bot slash commands, use monospace (single backticks) not ** or * around commands."
@@ -320,7 +326,7 @@ async def execute_think(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     try:
         status_msg = await update.message.reply_text("🤔 Deep thinking (this may take longer)...")
 
-        conv_context = await ConversationManager.format_for_rag(user_id, limit=5)
+        conv_context = await ConversationManager.format_for_rag(user_id, limit=None)
 
         answer = await generate_with_thinking(prompt=question, context=conv_context)
 

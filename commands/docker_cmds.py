@@ -7,6 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from utils.security import require_auth, rate_limit
+from services.readonly.constants import MAX_DOCKER_HOST_LOG_LINES
 from utils.formatters import format_docker_containers, format_error, format_success
 from utils.followup_state import (
     set_cmd_pending_exclusive,
@@ -222,7 +223,7 @@ async def run_dstart(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id
 async def run_logs(
     update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, container_name: str, lines: int = 50
 ):
-    lines = min(lines, 200)
+    lines = min(lines, MAX_DOCKER_HOST_LOG_LINES)
     try:
         await update.message.reply_text(f"📜 Fetching logs for `{container_name}`...")
         logs = get_container_logs(container_name, lines)

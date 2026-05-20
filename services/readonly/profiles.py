@@ -12,7 +12,7 @@ from typing import Final, List, Optional, Tuple
 import config
 
 from services.omv_rpc_specs import OMV_RPC_CALLS
-from services.readonly.constants import TAIL_FOLLOW_TIMEOUT_SECONDS
+from services.readonly.constants import MAX_DOCKER_HOST_LOG_LINES, TAIL_FOLLOW_TIMEOUT_SECONDS
 from services.readonly.fixed_commands import FIXED_ARGV
 from services.readonly import validators as v
 
@@ -260,7 +260,7 @@ def build_readonly_inner(
             n = int(extra_args[1]) if len(extra_args) > 1 else 120
         except ValueError:
             return None, "line_count must be integer", None
-        n = max(10, min(n, 500))
-        return ["docker", "logs", "--tail", str(n), c], None, 60
+        n = max(10, min(n, MAX_DOCKER_HOST_LOG_LINES))
+        return ["docker", "logs", "--tail", str(n), c], None, 90
 
     return None, f"unknown read-only profile: {profile}", None

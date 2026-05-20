@@ -9,3 +9,6 @@ TAIL_FOLLOW_TIMEOUT_SECONDS: Final[int] = 20
 
 # host_ping: loopback only (no LAN/internet probing from the AI tool path)
 PING_LOOPBACK_IPV4: Final[str] = "127.0.0.1"
+
+# docker_cli_logs_tail (host): tail line cap (agent may request up to this many)
+MAX_DOCKER_HOST_LOG_LINES: Final[int] = 2000

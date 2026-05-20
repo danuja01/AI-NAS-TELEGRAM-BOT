@@ -48,6 +48,7 @@ _SMART_DEVICE_RE = re.compile(
 
 from ai.host_read_profiles import HOST_READONLY_PROFILES, HOST_READONLY_PROFILES_ORDERED
 from services.readonly import ZERO_EXTRA_AGENT_PROFILES
+from services.readonly.constants import MAX_DOCKER_HOST_LOG_LINES
 
 _MAX_SERVICES = 45
 _MAX_SMART_DRIVES = 12
@@ -121,7 +122,8 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
         "line_count": {
             "type": "integer",
             "description": (
-                "Line count for host_file_head, host_file_tail, and docker_cli_logs_tail (optional; host_runner caps apply)."
+                "Line count for host_file_head, host_file_tail, and docker_cli_logs_tail (optional). "
+                f"docker_cli_logs_tail accepts up to {MAX_DOCKER_HOST_LOG_LINES} lines."
             ),
         },
         "grep_keyword": {
@@ -163,8 +165,8 @@ _NAS_AGENT_TOOLS_BASE: List[Dict[str, Any]] = [
     _tool_entry(
         "nas_network_interfaces",
         (
-            "Per-interface byte/packet counters and optional Tailscale IPv4 (like /network). "
-            "Use for bandwidth, interface names, or transfer totals."
+            "Per-interface byte/packet counters from this host (like /network). "
+            "Use for bandwidth, interface names, or transfer totals. Does not run Tailscale or other VPN CLIs."
         ),
     ),
     _tool_entry(
@@ -190,7 +192,12 @@ _NAS_AGENT_TOOLS_BASE: List[Dict[str, Any]] = [
     ),
     _tool_entry(
         "nas_list_docker_containers",
-        "List Docker containers on the host where the bot runs (running and/or stopped).",
+        (
+            "List Docker containers on the host where the bot runs (running and/or stopped). "
+            "For **unused/dangling Docker images** (reclaimable space), tell the user to run Telegram `/dimages` "
+            "(or `/dscan` for a full storage + Docker deep scan). `/docker` is only the compact dashboard — "
+            "do not suggest it for image-pruning questions."
+        ),
         {
             "include_stopped": {
                 "type": "boolean",
@@ -203,12 +210,15 @@ _NAS_AGENT_TOOLS_BASE: List[Dict[str, Any]] = [
     ),
     _tool_entry(
         "nas_docker_container_logs",
-        "Fetch recent stdout/stderr logs from one Docker container by name or short ID.",
+        (
+            "Fetch recent stdout/stderr logs from one Docker container by name or short ID. "
+            "Respects the user's requested line count up to the server cap (large tails may be truncated in JSON)."
+        ),
         {
             "container": {"type": "string", "description": "Container name or ID"},
             "line_count": {
                 "type": "integer",
-                "description": "Number of log lines (1–200, default 80)",
+                "description": f"Number of log lines to tail (1–{MAX_DOCKER_HOST_LOG_LINES}, default 80)",
             },
         },
         required=["container"],
@@ -448,11 +458,11 @@ def _docker_logs(container: str, line_count: int) -> str:
         return json.dumps({"ok": False, "error": "Docker SDK not installed"})
     if not _validate_container_name(container):
         return json.dumps({"ok": False, "error": "Invalid container name"})
-    line_count = max(1, min(int(line_count or 80), 200))
+    line_count = max(1, min(int(line_count or 80), MAX_DOCKER_HOST_LOG_LINES))
     try:
         logs = ds.get_container_logs(container, lines=line_count)
-        if len(logs) > 16000:
-            logs = "…[truncated]…\n" + logs[-16000:]
+        if len(logs) > 48000:
+            logs = "…[truncated]…\n" + logs[-48000:]
         return json.dumps({"ok": True, "container": container, "lines": line_count, "logs": logs})
     except Exception as e:
         logger.warning("nas_docker_container_logs: %s", e)
@@ -536,9 +546,6 @@ def _network_brief() -> str:
         raw = get_network_stats()
         out: Dict[str, Any] = {"ok": True, "interfaces": {}}
         for name, counters in raw.items():
-            if name == "tailscale_ip":
-                out["tailscale_ipv4"] = counters
-                continue
             if not isinstance(counters, dict):
                 continue
             out["interfaces"][name] = {
