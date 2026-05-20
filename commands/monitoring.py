@@ -44,6 +44,7 @@ from services.system_monitor import (
 )
 from services.smart_monitor import get_all_drives, check_drive_warnings, get_hdparm_power_state
 from database.memory import save_conversation, save_command, get_drive_spin_history
+from utils.conversation_snippet import html_reply_to_context_plain
 from utils.telegram_reply import reply_text_chunked
 from utils.network_tools import fetch_public_ipv4, run_ping, validate_ping_target
 
@@ -80,7 +81,9 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reply_text_safe(update, message, **_monitoring_kw())
 
         await save_conversation(user_id, "user", "/status")
-        await save_conversation(user_id, "assistant", message, command_output=str(stats))
+        await save_conversation(
+            user_id, "assistant", html_reply_to_context_plain(message), command_output=None
+        )
         await save_command(user_id, "/status", "System status retrieved")
 
     except Exception as e:
@@ -103,10 +106,7 @@ async def cpu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await save_conversation(user_id, "user", "/cpu")
         await save_conversation(
-            user_id,
-            "assistant",
-            message,
-            command_output=f"CPU: {stats.get('percent', 0):.1f}%",
+            user_id, "assistant", html_reply_to_context_plain(message), command_output=None
         )
         await save_command(user_id, "/cpu", f"CPU: {stats.get('percent', 0):.1f}%")
 
@@ -130,10 +130,7 @@ async def ram_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await save_conversation(user_id, "user", "/ram")
         await save_conversation(
-            user_id,
-            "assistant",
-            message,
-            command_output=f"RAM: {stats.get('percent', 0):.1f}% used",
+            user_id, "assistant", html_reply_to_context_plain(message), command_output=None
         )
         await save_command(user_id, "/ram", f"RAM: {stats.get('percent', 0):.1f}%")
 
@@ -170,7 +167,9 @@ async def disk_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reply_text_safe(update, message, **_monitoring_kw())
 
         await save_conversation(user_id, "user", "/disk")
-        await save_conversation(user_id, "assistant", message, command_output=str(stats))
+        await save_conversation(
+            user_id, "assistant", html_reply_to_context_plain(message), command_output=None
+        )
         await save_command(user_id, "/disk", f"{len(stats)} partitions")
 
     except Exception as e:
@@ -192,7 +191,9 @@ async def temps_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reply_text_safe(update, message, **_monitoring_kw())
 
         await save_conversation(user_id, "user", "/temps")
-        await save_conversation(user_id, "assistant", message, command_output=str(stats))
+        await save_conversation(
+            user_id, "assistant", html_reply_to_context_plain(message), command_output=None
+        )
         await save_command(user_id, "/temps", "Temperature stats retrieved")
 
     except Exception as e:
@@ -217,7 +218,9 @@ async def network_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await reply_text_safe(update, message, **_monitoring_kw())
 
         await save_conversation(user_id, "user", "/network")
-        await save_conversation(user_id, "assistant", message, command_output=str(stats))
+        await save_conversation(
+            user_id, "assistant", html_reply_to_context_plain(message), command_output=None
+        )
         await save_command(user_id, "/network", "Network stats retrieved")
 
     except Exception as e:
@@ -333,7 +336,7 @@ async def uptime_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await save_conversation(user_id, "user", "/uptime")
         await save_conversation(
-            user_id, "assistant", message, command_output=f"Uptime: {uptime_str}"
+            user_id, "assistant", html_reply_to_context_plain(message), command_output=None
         )
         await save_command(user_id, "/uptime", uptime_str)
 
@@ -365,8 +368,8 @@ async def health_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await save_conversation(
             user_id,
             "assistant",
-            message,
-            command_output=f"Health Score: {score}/100",
+            html_reply_to_context_plain(message),
+            command_output=None,
         )
         await save_command(user_id, "/health", f"Score: {score}/100")
 
@@ -414,7 +417,9 @@ async def smart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reply_text_safe(update, message, **_monitoring_kw())
 
         await save_conversation(user_id, "user", "/smart")
-        await save_conversation(user_id, "assistant", message, command_output=str(drives))
+        await save_conversation(
+            user_id, "assistant", html_reply_to_context_plain(message), command_output=None
+        )
         await save_command(user_id, "/smart", f"{len(drives)} drives checked")
 
     except Exception as e:
@@ -477,6 +482,9 @@ async def hdddetail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reply_text_chunked(update, message, parse_mode=ParseMode.HTML)
 
         await save_conversation(user_id, "user", "/hdddetail")
+        await save_conversation(
+            user_id, "assistant", html_reply_to_context_plain(message), command_output=None
+        )
         await save_command(user_id, "/hdddetail", f"{len(drives)} drives")
 
     except Exception as e:

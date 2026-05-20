@@ -192,6 +192,9 @@ def get_container_logs(name_or_id: str, lines: int = 50) -> str:
         Container logs as string
     """
     try:
+        from services.readonly.constants import MAX_DOCKER_HOST_LOG_LINES
+
+        lines = max(1, min(int(lines), MAX_DOCKER_HOST_LOG_LINES))
         container = get_container(name_or_id)
         logs = container.logs(tail=lines, timestamps=True).decode('utf-8', errors='replace')
         return logs

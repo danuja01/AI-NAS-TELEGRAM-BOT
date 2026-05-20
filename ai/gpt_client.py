@@ -159,6 +159,8 @@ async def generate_with_tools_loop(
             "which post the same Telegram Confirm/Cancel buttons as /drestart and /dstop (nothing happens until the user confirms)."
             + _ro_tools +
             " For other destructive host actions, still point users to slash commands. "
+            "For **unused or dangling Docker images** and reclaimable image space, tell users to run `/dimages` "
+            "(inventory) or `/dscan` (deep scan) — `/docker` is only the compact dashboard, not an image audit. "
             "Never use markdown pipe tables; use short bullet lists. "
             "Telegram renders Markdown strangely: wrap bot slash commands in inline code "
             "(one backtick before and after the command, like "

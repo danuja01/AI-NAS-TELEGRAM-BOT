@@ -25,13 +25,13 @@ Telegram confirmations; tell users to run the command themselves when a confirma
 - `/hdddetail` — HDD spin history and hdparm state; OMV physical disk inventory header when RPC works
 
 ## Docker and storage
-- `/docker` — Dashboard: disk summary, image/container counts, table
+- `/docker` — **Dashboard only**: compact disk summary + container/image counts (not a deep scan and not for listing unused images in detail).
 - `/containers` — List all containers with CPU/RAM when running
-- `/dscan` — Deep Docker/storage scan
+- `/dimages` — **Docker image inventory** with unused / dangling / in-use flags (use this when the user asks about **unused images** or reclaimable image space).
+- `/dscan` — **Deep** Docker + storage scan (paths, large files, prune estimates); use when they want a full analysis, not just `/docker`.
 - `/dclean` — Safe cleanup (with confirmations)
 - `/dprune` — Quick prune dangling images and build cache
 - `/daggressive` — Aggressive cleanup (extra confirmations)
-- `/dimages` — Docker images (unused/dangling/in use)
 - `/dbigfiles` — Largest files under allowlisted paths
 - `/dlogs` — Very large log files on scanned paths
 - `/dhealth` — NAS + Docker health snapshot
@@ -41,7 +41,7 @@ Telegram confirmations; tell users to run the command themselves when a confirma
 - In **/chat** and **/analyze**, the assistant may call tools that post the **same** restart/stop confirmation prompts (nothing runs until you tap Confirm).
 - When `AGENT_HOST_READONLY_TOOL=true` in `.env`, the assistant may call **`nas_host_readonly_profile`**: a fixed enum of
   read-only host commands over SSH/nsenter (not arbitrary shell; **not** a substitute for `/ssh`).
-- `/dtail <name> [lines]` — Container logs (default 50 lines, max 200)
+- `/dtail <name> [lines]` — Container logs (default 50 lines, up to 2000)
 
 ## Files
 - `/files` — Browse default documents folder
