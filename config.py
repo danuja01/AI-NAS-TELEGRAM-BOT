@@ -71,6 +71,9 @@ def _env_bool(name: str, default: bool = False) -> bool:
 # When True, expose nas_host_readonly_profile to /chat /analyze /ask agent (allowlisted host reads; see services/readonly).
 AGENT_HOST_READONLY_TOOL = _env_bool("AGENT_HOST_READONLY_TOOL", False)
 
+# When True, `get_network_stats()` runs `tailscale ip -4` (requires Tailscale CLI in the bot environment).
+NETWORK_TAILSCALE_CLI = _env_bool("NETWORK_TAILSCALE_CLI", True)
+
 # After startup: re-index RAG documents and message ALLOWED_USER_IDS (good after new deploy).
 AUTO_INDEX_ON_START = _env_bool("AUTO_INDEX_ON_START", False)
 # If true, clears the Chroma collection first (slower; use if embedding model changed).

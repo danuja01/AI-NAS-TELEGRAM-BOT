@@ -362,23 +362,92 @@ def format_network_stats(net_stats: Dict[str, Any]) -> str:
     """Format network statistics (Telegram HTML)."""
     msg = "🌐 <b>Network Statistics</b>\n\n"
 
-    for interface, stats in net_stats.items():
-        if interface == "tailscale_ip" or not isinstance(stats, dict):
-            continue
+    meta_keys = frozenset(
+        {
+            "tailscale_ip",
+            "outbound_local_ipv4",
+            "default_gateway_ipv4",
+            "default_route_iface",
+        }
+    )
 
-        msg += f"<b>{_h(interface)}</b>\n"
+    def_iface = net_stats.get("default_route_iface")
+    pairs = [(k, v) for k, v in net_stats.items() if k not in meta_keys and isinstance(v, dict)]
+
+    def _iface_sort(name: str) -> tuple[int, str]:
+        if def_iface and name == def_iface:
+            return (0, name)
+        return (1, name)
+
+    pairs.sort(key=lambda kv: _iface_sort(kv[0]))
+
+    out_l = net_stats.get("outbound_local_ipv4")
+    gw = net_stats.get("default_gateway_ipv4")
+    gw_if = net_stats.get("default_route_iface")
+    if out_l or gw or gw_if:
+        msg += "<b>Outbound / default route</b>\n"
+        if out_l:
+            msg += f"  Local IPv4 (outbound probe): <code>{_h(out_l)}</code>\n"
+        if gw:
+            msg += f"  Default gateway: <code>{_h(gw)}</code>\n"
+        if gw_if:
+            msg += f"  Default route iface: <code>{_h(gw_if)}</code>\n"
+        msg += "\n"
+
+    for interface, stats in pairs:
+        up = stats.get("isup")
+        if up is True:
+            state = "✅ UP"
+        elif up is False:
+            state = "⬇️ DOWN"
+        else:
+            state = "❔ state unknown"
+
+        msg += f"<b>{_h(interface)}</b> — {state}\n"
+
+        mtu = stats.get("mtu")
+        if mtu:
+            msg += f"  MTU: {_h(mtu)}\n"
+        duplex = stats.get("duplex")
+        if duplex and duplex != "unknown":
+            msg += f"  Duplex: {_h(duplex)}\n"
+        spd = stats.get("speed_mbps")
+        if spd:
+            msg += f"  Link speed: {_h(spd)} Mbps\n"
+
+        addrs = stats.get("addresses") or []
+        if addrs:
+            msg += "  Addresses:\n"
+            for a in addrs[:12]:
+                fam = a.get("family", "")
+                addr = a.get("address", "")
+                nm = a.get("netmask") or ""
+                scope = f" ({_h(fam)})" if fam else ""
+                if nm and fam == "ipv4":
+                    line = f"    <code>{_h(addr)}</code> / {_h(nm)}{scope}\n"
+                else:
+                    line = f"    <code>{_h(addr)}</code>{scope}\n"
+                msg += line
+            if len(addrs) > 12:
+                msg += f"    <i>… {_h(len(addrs) - 12)} more</i>\n"
+
         msg += f"  Sent: {format_bytes(stats.get('bytes_sent', 0))}\n"
         msg += f"  Received: {format_bytes(stats.get('bytes_recv', 0))}\n"
-
-        if "speed_mbps" in stats:
-            spd = stats["speed_mbps"]
-            msg += f"  Speed: {_h(spd)} Mbps\n"
-
+        ein = stats.get("errors_in", 0)
+        eout = stats.get("errors_out", 0)
+        if ein or eout:
+            msg += f"  Errors in/out: {_h(ein)} / {_h(eout)}\n"
         msg += "\n"
+
+    if not pairs:
+        msg += "<i>No non-loopback interfaces found.</i>\n\n"
 
     if "tailscale_ip" in net_stats:
         ts = net_stats["tailscale_ip"]
-        msg += f"<b>Tailscale IP:</b> <code>{_h(ts)}</code>\n"
+        msg += f"<b>Tailscale IPv4:</b> <code>{_h(ts)}</code>\n"
+        msg += "<i>(from <code>tailscale ip -4</code>; set NETWORK_TAILSCALE_CLI=false to skip)</i>\n"
+    elif getattr(config, "NETWORK_TAILSCALE_CLI", True):
+        msg += "<i>Tailscale: no IPv4 (CLI missing or not logged in; disable hints with NETWORK_TAILSCALE_CLI=false).</i>\n"
 
     return msg
 
