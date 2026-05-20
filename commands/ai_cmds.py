@@ -144,6 +144,7 @@ async def execute_chat(
                 "and **nas_request_docker_restart** / **nas_request_docker_stop** which post the same inline "
                 "Confirm/Cancel UI as /drestart and /dstop (nothing happens until the user taps Confirm). "
                 + _ro_chat
+                + "For **unused Docker images** or reclaimable image space, point users to `/dimages` or `/dscan`, not `/docker` (dashboard only). "
                 + "Whenever the user asks about their own machine, call read tools first and answer from data. "
                 "For bot slash commands (/drestart, /dimages), use monospace with one pair of Markdown backticks, "
                 "not bold/italic asterisks around commands. "
@@ -270,6 +271,7 @@ async def execute_analyze(
             "systemd services, configured storage paths, Docker list/logs/unhealthy, snapshot, "
             "and **nas_request_docker_restart** / **nas_request_docker_stop** (same inline Confirm/Cancel as /drestart /dstop). "
             + _ro_analyze
+            + "For **unused Docker images** or reclaimable image space, point users to `/dimages` or `/dscan`, not `/docker` (dashboard only). "
             + "For questions about this NAS, call tools first and reason from the data. "
             + "Never use markdown pipe tables; use bullet lists with bold names. "
             "For bot slash commands, use monospace (single backticks) not ** or * around commands."

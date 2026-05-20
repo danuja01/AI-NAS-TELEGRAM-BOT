@@ -143,17 +143,7 @@ def get_network_stats() -> Dict[str, Any]:
                 'errors_in': io_counters.errin,
                 'errors_out': io_counters.errout
             }
-        
-        # Try to get Tailscale IP
-        try:
-            import subprocess
-            result = subprocess.run(['tailscale', 'ip', '-4'], 
-                                   capture_output=True, text=True, timeout=2)
-            if result.returncode == 0:
-                stats['tailscale_ip'] = result.stdout.strip()
-        except:
-            pass
-        
+
         return stats
     
     except Exception as e:
