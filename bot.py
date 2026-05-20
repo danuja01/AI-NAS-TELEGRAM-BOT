@@ -59,7 +59,9 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("ram", "Memory usage"),
     BotCommand("disk", "Disk partitions"),
     BotCommand("temps", "Temperature sensors"),
-    BotCommand("network", "Network stats"),
+    BotCommand("network", "Network interfaces & traffic"),
+    BotCommand("netpublic", "Public IP & default route"),
+    BotCommand("netping", "Ping a host (ICMP)"),
     BotCommand("uptime", "System uptime"),
     BotCommand("health", "Health score"),
     BotCommand("smart", "Drive SMART"),
@@ -190,6 +192,8 @@ def main():
     application.add_handler(CommandHandler("disk", monitoring.disk_command))
     application.add_handler(CommandHandler("temps", monitoring.temps_command))
     application.add_handler(CommandHandler("network", monitoring.network_command))
+    application.add_handler(CommandHandler("netpublic", monitoring.netpublic_command))
+    application.add_handler(CommandHandler("netping", monitoring.netping_command))
     application.add_handler(CommandHandler("uptime", monitoring.uptime_command))
     application.add_handler(CommandHandler("health", monitoring.health_command))
     application.add_handler(CommandHandler("smart", monitoring.smart_command))

@@ -88,7 +88,7 @@ docker exec nas-telegram-bot curl -sS -X POST http://127.0.0.1:18765/notify \
 - Real-time CPU, RAM, disk, temperature, and network stats; optional **OpenMediaVault** filesystem and disk panels via host `omv-rpc` when the bot runs with host access (`HOST_EXEC_MODE`)
 - SMART drive health (`/smart`, `/drives`)
 - System health scoring (`/health`)
-- Per-interface network counters from the host (no Tailscale/VPN CLI from the bot)
+- Network: per-interface addresses, link state, default route (Linux), optional **Tailscale IPv4** via `tailscale ip -4` when `NETWORK_TAILSCALE_CLI=true`, plus `/netpublic` (outbound public IP) and `/netping`
 - Automated alerts (disk, CPU, memory, temperature, SMART, container crashes)
 
 ### Docker Management
@@ -199,7 +199,7 @@ Use `/help` in Telegram for the full list. Highlights:
 
 | Category | Commands |
 |----------|----------|
-| Monitoring | `/status`, `/cpu`, `/ram`, `/disk`, `/temps`, `/network`, `/uptime`, `/health`, `/smart`, `/drives` |
+| Monitoring | `/status`, `/cpu`, `/ram`, `/disk`, `/temps`, `/network`, `/netpublic`, `/netping`, `/uptime`, `/health`, `/smart`, `/drives` |
 | Docker | `/docker`, `/containers`, `/dstart`, `/drestart`, `/dstop`, `/dtail`, … |
 | Files | `/files`, `/ls`, `/download`, `/uploadfile`, `/find`, `/tree`, `/storage` |
 | AI | `/ask`, `/chat`, `/summarize`, `/explain`, `/analyze`, `/think`, `/websearch`, `/index`, `/clear` |

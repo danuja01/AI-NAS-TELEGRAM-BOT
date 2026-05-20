@@ -16,7 +16,9 @@ Telegram confirmations; tell users to run the command themselves when a confirma
 - `/ram` — Memory and swap
 - `/disk` — Disk partitions (live) plus OMV filesystem and physical disk panels when `omv-rpc` is available on the host
 - `/temps` — Temperature sensors
-- `/network` — Network interfaces and traffic
+- `/network` — Live interfaces: state, addresses, MTU/speed, counters, default route, optional Tailscale IPv4 (`tailscale ip -4` when `NETWORK_TAILSCALE_CLI=true`)
+- `/netpublic` — Public IPv4 via HTTPS plus local outbound IP and default gateway (same sources as `/network` summary)
+- `/netping <host>` — ICMP ping (fixed 4 probes); use IP or a simple hostname
 - `/uptime` — System uptime
 - `/health` — Health score and issues list
 - `/smart` or `/drives` — SMART drive summary (smartctl) plus OMV SMART device overview when available

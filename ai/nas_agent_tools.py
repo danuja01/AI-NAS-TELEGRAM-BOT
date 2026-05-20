@@ -165,8 +165,10 @@ _NAS_AGENT_TOOLS_BASE: List[Dict[str, Any]] = [
     _tool_entry(
         "nas_network_interfaces",
         (
-            "Per-interface byte/packet counters from this host (like /network). "
-            "Use for bandwidth, interface names, or transfer totals. Does not run Tailscale or other VPN CLIs."
+            "Live network interfaces: UP/DOWN, MTU, link speed, IPv4/IPv6 addresses, byte counters, "
+            "default gateway and interface when readable from /proc/net/route, outbound local IPv4 probe, "
+            "and optional Tailscale IPv4 from `tailscale ip -4` when NETWORK_TAILSCALE_CLI=true. "
+            "Users can also run `/network`, `/netpublic` (public IP), and `/netping <host>`."
         ),
     ),
     _tool_entry(
@@ -545,14 +547,35 @@ def _network_brief() -> str:
     try:
         raw = get_network_stats()
         out: Dict[str, Any] = {"ok": True, "interfaces": {}}
-        for name, counters in raw.items():
-            if not isinstance(counters, dict):
+        for name, val in raw.items():
+            if name == "tailscale_ip":
+                out["tailscale_ipv4"] = val
                 continue
+            if name in ("outbound_local_ipv4", "default_gateway_ipv4", "default_route_iface"):
+                out[name] = val
+                continue
+            if not isinstance(val, dict):
+                continue
+            addrs = val.get("addresses") or []
+            slim_addrs = []
+            for a in addrs[:10]:
+                if isinstance(a, dict):
+                    slim_addrs.append(
+                        {
+                            "family": a.get("family"),
+                            "address": a.get("address"),
+                        }
+                    )
             out["interfaces"][name] = {
-                "mb_sent": round(counters.get("bytes_sent", 0) / (1024**2), 2),
-                "mb_recv": round(counters.get("bytes_recv", 0) / (1024**2), 2),
-                "errors_in": counters.get("errors_in", 0),
-                "errors_out": counters.get("errors_out", 0),
+                "isup": val.get("isup"),
+                "mtu": val.get("mtu"),
+                "speed_mbps": val.get("speed_mbps"),
+                "duplex": val.get("duplex"),
+                "addresses": slim_addrs,
+                "mb_sent": round(val.get("bytes_sent", 0) / (1024**2), 2),
+                "mb_recv": round(val.get("bytes_recv", 0) / (1024**2), 2),
+                "errors_in": val.get("errors_in", 0),
+                "errors_out": val.get("errors_out", 0),
             }
         return json.dumps(out, default=str)
     except Exception as e:

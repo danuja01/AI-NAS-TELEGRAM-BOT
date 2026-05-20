@@ -3,11 +3,13 @@ System monitoring service using psutil.
 Provides comprehensive system statistics.
 """
 
-import psutil
-import platform
 import logging
-from typing import Dict, List, Any, Optional
+import socket
+import struct
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import psutil
 
 import config
 
@@ -123,31 +125,176 @@ def get_temperatures() -> Dict[str, Optional[float]]:
         return {}
 
 
-def get_network_stats() -> Dict[str, Any]:
-    """Get network statistics."""
+def _tailscale_ipv4() -> Optional[str]:
+    if not getattr(config, "NETWORK_TAILSCALE_CLI", True):
+        return None
     try:
-        net_io = psutil.net_io_counters(pernic=True)
-        
-        stats = {}
-        
-        for interface, io_counters in net_io.items():
-            # Skip loopback
-            if interface.startswith('lo'):
+        import subprocess
+
+        result = subprocess.run(
+            ["tailscale", "ip", "-4"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception as e:
+        logger.debug("tailscale ip -4 unavailable: %s", e)
+    return None
+
+
+def _outbound_local_ipv4() -> Optional[str]:
+    """Local IPv4 chosen for outbound traffic (UDP trick; no packets are sent)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            addr = s.getsockname()[0]
+            return addr if addr else None
+        finally:
+            s.close()
+    except Exception:
+        return None
+
+
+def _linux_default_route() -> tuple[Optional[str], Optional[str]]:
+    """(gateway_ipv4, interface) from /proc/net/route, or (None, None)."""
+    try:
+        with open("/proc/net/route", encoding="utf-8") as f:
+            next(f)
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                iface, dest, gw_hex = parts[0], parts[1], parts[2]
+                if dest != "00000000":
+                    continue
+                if not gw_hex or gw_hex == "00000000":
+                    continue
+                gw_int = int(gw_hex, 16)
+                gw = socket.inet_ntoa(struct.pack("<L", gw_int))
+                return gw, iface
+    except Exception:
+        pass
+    return None, None
+
+
+def _duplex_label(duplex: Any) -> str:
+    if duplex is None:
+        return "unknown"
+    try:
+        if duplex == psutil.NIC_DUPLEX_FULL:
+            return "full"
+        if duplex == psutil.NIC_DUPLEX_HALF:
+            return "half"
+    except Exception:
+        pass
+    return "unknown"
+
+
+def get_network_stats() -> Dict[str, Any]:
+    """
+    Per-interface counters plus link state, MTU, addresses, default route, outbound local IP,
+    and optional Tailscale IPv4 (see config.NETWORK_TAILSCALE_CLI).
+    """
+    try:
+        try:
+            net_io = psutil.net_io_counters(pernic=True) or {}
+        except Exception:
+            net_io = {}
+        try:
+            if_stats = psutil.net_if_stats() or {}
+        except Exception:
+            if_stats = {}
+        try:
+            if_addrs = psutil.net_if_addrs() or {}
+        except Exception:
+            if_addrs = {}
+
+        names = set(net_io.keys()) | set(if_stats.keys()) | set(if_addrs.keys())
+        stats: Dict[str, Any] = {}
+
+        for interface in sorted(names):
+            if interface.startswith("lo"):
                 continue
-            
-            stats[interface] = {
-                'bytes_sent': io_counters.bytes_sent,
-                'bytes_recv': io_counters.bytes_recv,
-                'packets_sent': io_counters.packets_sent,
-                'packets_recv': io_counters.packets_recv,
-                'errors_in': io_counters.errin,
-                'errors_out': io_counters.errout
-            }
+            row: Dict[str, Any] = {}
+
+            io = net_io.get(interface)
+            if io is not None:
+                row.update(
+                    {
+                        "bytes_sent": io.bytes_sent,
+                        "bytes_recv": io.bytes_recv,
+                        "packets_sent": io.packets_sent,
+                        "packets_recv": io.packets_recv,
+                        "errors_in": io.errin,
+                        "errors_out": io.errout,
+                    }
+                )
+            else:
+                row.update(
+                    {
+                        "bytes_sent": 0,
+                        "bytes_recv": 0,
+                        "packets_sent": 0,
+                        "packets_recv": 0,
+                        "errors_in": 0,
+                        "errors_out": 0,
+                    }
+                )
+
+            st = if_stats.get(interface)
+            if st is not None:
+                row["isup"] = bool(st.isup)
+                row["duplex"] = _duplex_label(getattr(st, "duplex", None))
+                spd = int(getattr(st, "speed", 0) or 0)
+                row["speed_mbps"] = spd if spd > 0 else None
+                mtu = getattr(st, "mtu", None)
+                row["mtu"] = int(mtu) if mtu is not None else None
+            else:
+                row["isup"] = None
+                row["duplex"] = "unknown"
+                row["speed_mbps"] = None
+                row["mtu"] = None
+
+            addr_rows: List[Dict[str, str]] = []
+            for snic in if_addrs.get(interface, []):
+                fam = snic.family
+                if fam == socket.AF_INET:
+                    fam_name = "ipv4"
+                elif fam == getattr(socket, "AF_INET6", None):
+                    fam_name = "ipv6"
+                else:
+                    fam_name = str(int(fam))
+                addr_rows.append(
+                    {
+                        "family": fam_name,
+                        "address": snic.address,
+                        "netmask": snic.netmask or "",
+                    }
+                )
+            row["addresses"] = addr_rows
+
+            stats[interface] = row
+
+        ts = _tailscale_ipv4()
+        if ts:
+            stats["tailscale_ip"] = ts
+
+        outbound = _outbound_local_ipv4()
+        if outbound:
+            stats["outbound_local_ipv4"] = outbound
+        gw, gw_if = _linux_default_route()
+        if gw:
+            stats["default_gateway_ipv4"] = gw
+        if gw_if:
+            stats["default_route_iface"] = gw_if
 
         return stats
-    
+
     except Exception as e:
-        logger.error(f"Failed to get network stats: {e}")
+        logger.error("Failed to get network stats: %s", e)
         return {}
 
 

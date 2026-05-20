@@ -46,6 +46,7 @@ from services.smart_monitor import get_all_drives, check_drive_warnings, get_hdp
 from database.memory import save_conversation, save_command, get_drive_spin_history
 from utils.conversation_snippet import html_reply_to_context_plain
 from utils.telegram_reply import reply_text_chunked
+from utils.network_tools import fetch_public_ipv4, run_ping, validate_ping_target
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +212,10 @@ async def network_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         stats = get_network_stats()
         message = format_network_stats(stats)
-        await reply_text_safe(update, message, **_monitoring_kw())
+        if len(message) > 3500:
+            await reply_text_chunked(update, message, parse_mode=ParseMode.HTML)
+        else:
+            await reply_text_safe(update, message, **_monitoring_kw())
 
         await save_conversation(user_id, "user", "/network")
         await save_conversation(
@@ -223,6 +227,96 @@ async def network_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in network_command: {e}", exc_info=True)
         await reply_text_safe(
             update, format_error_html(f"Failed to get network stats: {e}"), **_monitoring_kw()
+        )
+
+
+@require_auth
+@rate_limit
+async def netpublic_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Public IPv4 (HTTPS) plus local outbound IP, default route, Tailscale when available."""
+    user_id = update.effective_user.id
+    try:
+        await reply_text_safe(update, "🌍 Looking up public and local routing…")
+        pub = fetch_public_ipv4()
+        stats = get_network_stats()
+        out_l = stats.get("outbound_local_ipv4")
+        gw = stats.get("default_gateway_ipv4")
+        gw_if = stats.get("default_route_iface")
+        ts = stats.get("tailscale_ip")
+
+        lines = ["🌍 <b>Public &amp; routing</b>\n"]
+        if pub:
+            lines.append(f"<b>Public IPv4</b> (outbound, via HTTPS): <code>{escape_telegram_html(pub)}</code>")
+        else:
+            lines.append("<b>Public IPv4:</b> <i>could not resolve (no route, DNS, or HTTP blocked)</i>")
+        if out_l:
+            lines.append(f"<b>Local outbound IPv4</b> (socket probe): <code>{escape_telegram_html(out_l)}</code>")
+        if gw:
+            lines.append(f"<b>Default gateway:</b> <code>{escape_telegram_html(gw)}</code>")
+        if gw_if:
+            lines.append(f"<b>Default interface:</b> <code>{escape_telegram_html(gw_if)}</code>")
+        if ts:
+            lines.append(f"<b>Tailscale IPv4:</b> <code>{escape_telegram_html(ts)}</code>")
+        lines.append("")
+        lines.append("<i>For full per-interface addresses and counters, use <code>/network</code>.</i>")
+        message = "\n".join(lines)
+        await reply_text_safe(update, message, **_monitoring_kw())
+
+        await save_conversation(user_id, "user", "/netpublic")
+        await save_conversation(user_id, "assistant", message, command_output=None)
+        await save_command(user_id, "/netpublic", pub or "unavailable")
+    except Exception as e:
+        logger.error("Error in netpublic_command: %s", e, exc_info=True)
+        await reply_text_safe(
+            update, format_error_html(f"Failed to resolve public IP: {e}"), **_monitoring_kw()
+        )
+
+
+@require_auth
+@rate_limit
+async def netping_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """ICMP ping to a single host or IPv4/IPv6 literal (fixed packet count)."""
+    user_id = update.effective_user.id
+    try:
+        raw = (context.args[0] if context.args else "").strip()
+        if not raw:
+            await reply_text_safe(
+                update,
+                "Usage: <code>/netping 1.1.1.1</code> or <code>/netping nas.lan</code>\n"
+                "<i>Hostname must be alphanumeric/labels; IPv4 and IPv6 literals allowed.</i>",
+                **_monitoring_kw(),
+            )
+            return
+        host = validate_ping_target(raw)
+        if not host:
+            await reply_text_safe(
+                update,
+                format_error_html("Invalid target. Use a hostname like `router.lan` or an IP address."),
+                **_monitoring_kw(),
+            )
+            return
+
+        await reply_text_safe(update, f"📡 Pinging <code>{escape_telegram_html(host)}</code>…", **_monitoring_kw())
+        code, out, err = run_ping(host)
+        tail = (out or "") + (("\n" + err) if err else "")
+        tail = tail.strip() or "(no output)"
+        if len(tail) > 3500:
+            tail = tail[:3490] + "\n…"
+
+        status = "ok" if code == 0 else f"exit {code}"
+        message = (
+            f"📡 <b>Ping</b> <code>{escape_telegram_html(host)}</code> — <code>{escape_telegram_html(status)}</code>\n\n"
+            f"<pre>{escape_telegram_html(tail)}</pre>"
+        )
+        await reply_text_chunked(update, message, parse_mode=ParseMode.HTML)
+
+        await save_conversation(user_id, "user", f"/netping {host}")
+        await save_conversation(user_id, "assistant", message, command_output=None)
+        await save_command(user_id, "/netping", f"{host} rc={code}")
+    except Exception as e:
+        logger.error("Error in netping_command: %s", e, exc_info=True)
+        await reply_text_safe(
+            update, format_error_html(f"Ping failed: {e}"), **_monitoring_kw()
         )
 
 
