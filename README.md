@@ -60,10 +60,7 @@ For OpenMediaVault / Debian **host** actions from the bot, the container should 
 | `HEALTH_CHECK_INTERVAL`, `METRICS_SAMPLE_INTERVAL_MINUTES`, `DIGEST_INTERVAL_HOURS` | Monitoring scheduler |
 | `OMV_RPC_USER` | User passed to `omv-rpc -u` (default `admin`) |
 | `OMV_RPC_ENABLED` | `true`/`false` — disable all OMV RPC reads from the bot |
-| `AGENT_HOST_READONLY_TOOL` | When `true`, AI tools may trigger read-only host profiles (SSH/nsenter). |
-| `AGENT_HOST_READONLY_EVALUATOR_MODE` | With the above, use **`nas_host_read_request`**: natural language → separate JSON evaluator → same fixed profiles (still no arbitrary shell). |
-| `AGENT_HOST_READ_EVALUATOR_RAG_ONLY` | With evaluator mode: **`/ask`** only gets the natural-language host tool; **`/chat`** keeps the explicit enum tool. |
-| `HOST_READ_EVALUATOR_MODEL` | Optional model for the evaluator (empty = `DEFAULT_MODEL`). |
+| `AGENT_HOST_READONLY_TOOL` | When `true`, AI tools may trigger read-only host profiles (SSH/nsenter) via fixed enum `nas_host_readonly_profile`. |
 
 **Telegram commands:** `/updates` (apt refresh + upgradable list), `/omv_updates` (same + OMV note), `/upgrade` (confirm, then **`omv-upgrade`** on host; long-running).
 

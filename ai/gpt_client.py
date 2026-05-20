@@ -147,17 +147,10 @@ async def generate_with_tools_loop(
     if system_prompt is None:
         _ro_tools = ""
         if config.AGENT_HOST_READONLY_TOOL:
-            if getattr(config, "AGENT_HOST_READONLY_EVALUATOR_MODE", False):
-                _ro_tools = (
-                    " **nas_host_read_request** sends short natural-language read intents through a **separate** "
-                    "JSON-only evaluator (no RAG document access) that maps to the same fixed read-only host profiles "
-                    "as the manual enum tool — not arbitrary shell; it does **not** replace **`/ssh`**. "
-                )
-            else:
-                _ro_tools = (
-                    " **nas_host_readonly_profile** calls allow-listed read-only host diagnostics via SSH/nsenter "
-                    "(not arbitrary shell); it does **not** replace **`/ssh`**. "
-                )
+            _ro_tools = (
+                " **nas_host_readonly_profile** calls allow-listed read-only host diagnostics via SSH/nsenter "
+                "(fixed argv — not arbitrary shell); it does **not** replace **`/ssh`**. "
+            )
         system_prompt = (
             "You are a concise technical assistant for a NAS Telegram bot. "
             "You have tools for THIS host: temperatures, health score, disks, network, SMART, "
