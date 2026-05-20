@@ -32,6 +32,10 @@ from monitoring.alerts import (
     check_storage_low_disk_alerts,
     check_temperature_alerts,
 )
+from monitoring.auto_troubleshoot import (
+    run_autotroubleshoot_for_alerts,
+    scan_unacknowledged_alerts,
+)
 from monitoring.cron_notify_server import start_cron_notify_server
 from services.docker_service import list_containers
 from services.host_runner import run_profile
@@ -171,7 +175,12 @@ async def check_system_health(bot: Bot):
                 logger.debug("SMART check skipped", exc_info=True)
 
         if all_alerts:
-            await send_alerts(bot, all_alerts)
+            delivered = await send_alerts(bot, all_alerts)
+            if delivered and config.AUTOTROUBLESHOOT_ENABLED:
+                try:
+                    await run_autotroubleshoot_for_alerts(bot, delivered)
+                except Exception as e:
+                    logger.error("Autotroubleshoot after alerts: %s", e, exc_info=True)
 
     except Exception as e:
         logger.error("Health check failed: %s", e, exc_info=True)
@@ -231,13 +240,14 @@ async def _journal_snippet(unit: str) -> str:
         return ""
 
 
-async def send_alerts(bot: Bot, alerts: List[Dict[str, Any]]):
-    """Send alerts to authorized users."""
+async def send_alerts(bot: Bot, alerts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Send alerts to authorized users. Returns alerts that were actually delivered."""
     if not config.ALLOWED_USER_IDS:
         logger.warning("No users configured to receive alerts")
-        return
+        return []
 
     current_time = datetime.now()
+    delivered: List[Dict[str, Any]] = []
 
     for alert in alerts:
         alert_key = f"{alert['type']}_{alert['message'][:120]}"
@@ -290,6 +300,9 @@ async def send_alerts(bot: Bot, alerts: List[Dict[str, Any]]):
                 logger.warning("Failed to persist alert to conversation user=%s: %s", user_id, e)
 
         _last_alert_times[alert_key] = current_time
+        delivered.append(alert)
+
+    return delivered
 
 
 async def start_health_monitoring(bot: Bot):
@@ -343,6 +356,15 @@ async def start_health_monitoring(bot: Bot):
             minute=0,
             args=[bot],
             id="weekly_storage_scan",
+        )
+    if config.AUTOTROUBLESHOOT_ENABLED and config.AUTOTROUBLESHOOT_SCAN_UNACK:
+        scan_h = max(1, config.AUTOTROUBLESHOOT_UNACK_SCAN_HOURS)
+        _scheduler.add_job(
+            scan_unacknowledged_alerts,
+            "interval",
+            hours=scan_h,
+            args=[bot],
+            id="autotroubleshoot_unack_scan",
         )
     _scheduler.start()
 
