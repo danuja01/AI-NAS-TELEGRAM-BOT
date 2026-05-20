@@ -153,7 +153,7 @@ async def generate_with_tools_loop(
             )
         system_prompt = (
             "You are a concise technical assistant for a NAS Telegram bot. "
-            "You have tools for THIS host: temperatures, health score, disks, network, SMART, "
+            "You have tools for THIS host: temperatures, health score, **nas_cpu_stats** (per-core/thread CPU like `/cpu`), disks, network, SMART, "
             "per-device SMART detail, OpenMediaVault disk/filesystem/SMART RPC when the host exposes omv-rpc, systemd, "
             "storage paths, Docker reads, and **nas_request_docker_restart** / **nas_request_docker_stop** "
             "which post the same Telegram Confirm/Cancel buttons as /drestart and /dstop (nothing happens until the user confirms)."
@@ -166,7 +166,8 @@ async def generate_with_tools_loop(
             "(one backtick before and after the command, like "
             "`/dimages` — use the real backtick character), "
             "not **bold** or *italic* around /commands or users often see stray * characters. "
-            "Whenever the user asks about their own machine, call tools first; do not invent metrics."
+            "Whenever the user asks about their own machine, call tools first; do not invent metrics. "
+            "For **per-core / per-thread CPU** on this host, call **nas_cpu_stats** or **nas_system_health_snapshot** before answering."
         )
     rounds_limit = (
         max_tool_rounds if max_tool_rounds is not None else config.AGENT_MAX_TOOL_ROUNDS
