@@ -19,6 +19,7 @@ from database.memory import (
     get_metrics_digest_stats,
     get_smart_snapshots_dict,
     save_alert,
+    save_conversation,
     upsert_smart_snapshots,
 )
 from monitoring.alerts import (
@@ -42,6 +43,7 @@ from services.system_monitor import (
     get_temperatures,
 )
 from utils.formatters import escape_telegram_html
+from utils.conversation_snippet import html_reply_to_context_plain
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +76,24 @@ async def send_digest(bot: Bot):
     if stats.get("disk_free_min") is not None:
         lines.append(f"Lowest free disk headroom snapshot: <code>{stats['disk_free_min']:.1f}%</code>")
     text = "\n".join(lines)
+    plain = html_reply_to_context_plain(text, max_len=12000)
     for uid in config.ALLOWED_USER_IDS:
         try:
             await bot.send_message(uid, text, parse_mode=ParseMode.HTML)
         except Exception as e:
             logger.error("digest send failed %s: %s", uid, e)
+            continue
+        if plain:
+            try:
+                await save_conversation(
+                    uid,
+                    "assistant",
+                    "[Scheduled NAS digest]",
+                    command_output=plain,
+                    metadata={"source": "digest"},
+                )
+            except Exception as e:
+                logger.warning("digest persist conversation failed %s: %s", uid, e)
 
 
 async def record_metrics_sample():
@@ -257,6 +272,22 @@ async def send_alerts(bot: Bot, alerts: List[Dict[str, Any]]):
                 logger.info("Sent alert to user %s: %s", user_id, alert["type"])
             except Exception as e:
                 logger.error("Failed to send alert to user %s: %s", user_id, e)
+                continue
+            try:
+                plain = html_reply_to_context_plain(message, max_len=12000)
+                await save_conversation(
+                    user_id,
+                    "assistant",
+                    f"[Bot alert: {alert['type']} / {alert['severity']}]",
+                    command_output=plain or raw_msg[:8000],
+                    metadata={
+                        "source": "health_alert",
+                        "alert_type": alert["type"],
+                        "severity": alert["severity"],
+                    },
+                )
+            except Exception as e:
+                logger.warning("Failed to persist alert to conversation user=%s: %s", user_id, e)
 
         _last_alert_times[alert_key] = current_time
 
