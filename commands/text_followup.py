@@ -79,10 +79,7 @@ async def unified_pending_text_handler(update: Update, context: ContextTypes.DEF
         from commands import root_cmds, docker_cmds, service, filesystem
 
         if cmd == FOLLOWUP_ROOTLOGIN:
-            await update.message.reply_text(
-                "🔒 For security, send `/rootlogin <password>` in one private message (not as follow-up).",
-                parse_mode="Markdown",
-            )
+            await root_cmds.run_rootlogin_attempt(update, context, user_id, text)
         elif cmd == FOLLOWUP_SSH:
             await root_cmds.run_ssh_command(update, context, user_id, text)
         elif cmd == FOLLOWUP_DOCKER_RESTART:

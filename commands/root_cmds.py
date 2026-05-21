@@ -61,6 +61,7 @@ async def rootlogin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not context.args:
+        set_cmd_pending_exclusive(context, FOLLOWUP_ROOTLOGIN)
         await update.message.reply_text(_CMD_HINT_ROOTLOGIN, parse_mode="Markdown")
         return
 
