@@ -7,7 +7,25 @@ import logging
 import shutil
 from typing import List, Dict, Any, Optional
 
+import config
+from services.readonly.validators import validate_systemd_unit
+
 logger = logging.getLogger(__name__)
+
+
+def _validate_restart_unit(service_name: str) -> str:
+    name = (service_name or "").strip()
+    if not name:
+        raise ValueError("Service name is required")
+    allowed = getattr(config, "RESTART_SERVICE_ALLOWED_UNITS", None) or config.MONITOR_SYSTEMD_UNITS
+    if name not in allowed:
+        raise ValueError(
+            f"Service `{name}` is not in RESTART_SERVICE_ALLOWED_UNITS. "
+            f"Allowed: {', '.join(allowed)}"
+        )
+    if not validate_systemd_unit(name):
+        raise ValueError(f"Invalid systemd unit name: {name}")
+    return name
 
 
 def is_systemctl_available() -> bool:

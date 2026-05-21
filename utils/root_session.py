@@ -1,13 +1,14 @@
 """
 Root session manager for temporary elevated file system access.
-Allows users to authenticate and gain temporary access to all paths.
 """
 
 import logging
-import hashlib
+import hmac
 from datetime import datetime, timedelta
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 import asyncio
+
+import bcrypt
 
 import config
 
@@ -17,224 +18,145 @@ logger = logging.getLogger(__name__)
 class RootSessionManager:
     """
     Manages temporary root sessions for users.
-    
-    Root sessions allow access to all paths (/) for a limited time.
-    Sessions expire after 30 minutes.
-    All root access is logged for security audit.
+
+    Elevated sessions expand allowed paths to configured NAS roots (not full /).
+    Sessions expire after 30 minutes. All root access is logged.
     """
-    
-    # Store active sessions: {user_id: {'expires_at': datetime, 'started_at': datetime, 'working_dir': Optional[str]}}
-    _sessions: Dict[int, Dict[str, any]] = {}
-    
-    # Session duration (30 minutes)
+
+    _sessions: Dict[int, Dict[str, Any]] = {}
     SESSION_DURATION = timedelta(minutes=30)
-    
+
     @classmethod
-    def _hash_password(cls, password: str) -> str:
-        """Hash a password for comparison."""
-        return hashlib.sha256(password.encode()).hexdigest()
-    
+    def _verify_password(cls, password: str) -> bool:
+        stored = getattr(config, "ROOT_PASSWORD", "") or ""
+        if not stored:
+            logger.warning("ROOT_PASSWORD not configured")
+            return False
+        if stored.startswith("$2"):
+            try:
+                return bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
+            except ValueError:
+                logger.error("ROOT_PASSWORD bcrypt hash is invalid")
+                return False
+        logger.warning(
+            "ROOT_PASSWORD is plaintext; set a bcrypt hash (scripts/hash_root_password.py)"
+        )
+        return hmac.compare_digest(password, stored)
+
+    @classmethod
+    def get_elevated_allowed_paths(cls) -> List[str]:
+        """Paths available during an active root session (not unrestricted /)."""
+        candidates = []
+        for raw in (
+            config.DOCUMENT_PATH or "/app/documents",
+            getattr(config, "DISK_ROOT_PATH", "") or "",
+            *config.ALLOWED_PATHS,
+            "/app/data",
+        ):
+            p = str(raw).strip()
+            if p and p not in candidates:
+                candidates.append(p)
+        return candidates or ["/app/documents"]
+
     @classmethod
     def authenticate(cls, user_id: int, password: str) -> bool:
-        """
-        Authenticate a user and create a root session.
-        
-        Args:
-            user_id: Telegram user ID
-            password: Password to verify
-        
-        Returns:
-            True if authentication successful, False otherwise
-        """
-        try:
-            # Check if ROOT_PASSWORD is set
-            if not hasattr(config, 'ROOT_PASSWORD') or not config.ROOT_PASSWORD:
-                logger.warning("ROOT_PASSWORD not configured")
-                return False
-            
-            # Simple password comparison (in production, use bcrypt)
-            if password != config.ROOT_PASSWORD:
-                logger.warning(f"Failed root login attempt by user {user_id}")
-                return False
-            
-            # Create session
-            now = datetime.now()
-            expires_at = now + cls.SESSION_DURATION
-            
-            cls._sessions[user_id] = {
-                'started_at': now,
-                'expires_at': expires_at,
-                'working_dir': None
-            }
-            
-            logger.warning(f"Root session created for user {user_id} (expires at {expires_at})")
-            return True
-        
-        except Exception as e:
-            logger.error(f"Error in root authentication: {e}")
+        from utils.security import is_root_login_locked, record_root_login_failure, clear_root_login_failures
+
+        if is_root_login_locked(user_id):
+            logger.warning("Root login blocked (lockout) for user %s", user_id)
             return False
-    
+
+        if not cls._verify_password(password):
+            record_root_login_failure(user_id)
+            logger.warning("Failed root login attempt by user %s", user_id)
+            return False
+
+        clear_root_login_failures(user_id)
+        now = datetime.now()
+        expires_at = now + cls.SESSION_DURATION
+        cls._sessions[user_id] = {
+            "started_at": now,
+            "expires_at": expires_at,
+            "working_dir": None,
+        }
+        logger.warning("Root session created for user %s (expires at %s)", user_id, expires_at)
+        return True
+
     @classmethod
     def is_root_session_active(cls, user_id: int) -> bool:
-        """
-        Check if a user has an active root session.
-        
-        Args:
-            user_id: Telegram user ID
-        
-        Returns:
-            True if session is active and not expired
-        """
         if user_id not in cls._sessions:
             return False
-        
         session = cls._sessions[user_id]
-        now = datetime.now()
-        
-        if now > session['expires_at']:
-            # Session expired, remove it
+        if datetime.now() > session["expires_at"]:
             cls.logout(user_id)
             return False
-        
         return True
-    
+
     @classmethod
     def get_allowed_paths_for_user(cls, user_id: int) -> List[str]:
-        """
-        Get allowed paths for a user based on their root session status.
-        
-        Args:
-            user_id: Telegram user ID
-        
-        Returns:
-            List of allowed paths
-        """
         if cls.is_root_session_active(user_id):
-            logger.info(f"User {user_id} accessing with root session (all paths allowed)")
-            return ["/"]  # All paths allowed
-        
-        # Return default allowed paths
+            paths = cls.get_elevated_allowed_paths()
+            logger.info("User %s root session paths: %s", user_id, paths)
+            return paths
         return config.ALLOWED_PATHS
-    
+
     @classmethod
     def set_working_directory(cls, user_id: int, path: str) -> bool:
-        """
-        Set working directory for a user with active root session.
-        
-        Args:
-            user_id: Telegram user ID
-            path: Working directory path
-        
-        Returns:
-            True if successful, False if no active session
-        """
         if not cls.is_root_session_active(user_id):
-            logger.warning(f"Attempted to set working dir for user {user_id} without active root session")
+            logger.warning("set_working_dir without root session user=%s", user_id)
             return False
-        
-        cls._sessions[user_id]['working_dir'] = path
-        logger.info(f"Working directory set for user {user_id}: {path}")
+        cls._sessions[user_id]["working_dir"] = path
+        logger.info("Working directory set for user %s: %s", user_id, path)
         return True
-    
+
     @classmethod
     def get_working_directory(cls, user_id: int) -> Optional[str]:
-        """
-        Get current working directory for a user.
-        
-        Args:
-            user_id: Telegram user ID
-        
-        Returns:
-            Working directory path or None
-        """
         if not cls.is_root_session_active(user_id):
             return None
-        
-        return cls._sessions[user_id].get('working_dir')
-    
+        return cls._sessions[user_id].get("working_dir")
+
     @classmethod
     def logout(cls, user_id: int) -> bool:
-        """
-        End a root session.
-        
-        Args:
-            user_id: Telegram user ID
-        
-        Returns:
-            True if session was active and ended, False otherwise
-        """
         if user_id in cls._sessions:
-            session_duration = datetime.now() - cls._sessions[user_id]['started_at']
+            duration = datetime.now() - cls._sessions[user_id]["started_at"]
             del cls._sessions[user_id]
-            logger.warning(f"Root session ended for user {user_id} (duration: {session_duration})")
+            logger.warning("Root session ended for user %s (duration: %s)", user_id, duration)
             return True
-        
         return False
-    
+
     @classmethod
-    def get_session_info(cls, user_id: int) -> Optional[Dict[str, any]]:
-        """
-        Get information about a user's root session.
-        
-        Args:
-            user_id: Telegram user ID
-        
-        Returns:
-            Session info dict or None if no active session
-        """
+    def get_session_info(cls, user_id: int) -> Optional[Dict[str, Any]]:
         if not cls.is_root_session_active(user_id):
             return None
-        
         session = cls._sessions[user_id]
-        now = datetime.now()
-        remaining = session['expires_at'] - now
-        
+        remaining = session["expires_at"] - datetime.now()
         return {
-            'active': True,
-            'started_at': session['started_at'],
-            'expires_at': session['expires_at'],
-            'remaining_seconds': int(remaining.total_seconds()),
-            'remaining_minutes': int(remaining.total_seconds() // 60)
+            "active": True,
+            "started_at": session["started_at"],
+            "expires_at": session["expires_at"],
+            "remaining_seconds": int(remaining.total_seconds()),
+            "remaining_minutes": int(remaining.total_seconds() // 60),
         }
-    
+
     @classmethod
     async def cleanup_expired_sessions(cls):
-        """
-        Background task to cleanup expired sessions.
-        Should be called periodically.
-        """
         while True:
             try:
                 now = datetime.now()
-                expired_users = []
-                
-                for user_id, session in cls._sessions.items():
-                    if now > session['expires_at']:
-                        expired_users.append(user_id)
-                
-                for user_id in expired_users:
-                    cls.logout(user_id)
-                    logger.info(f"Auto-expired root session for user {user_id}")
-                
-                # Check every minute
+                for user_id in list(cls._sessions.keys()):
+                    if now > cls._sessions[user_id]["expires_at"]:
+                        cls.logout(user_id)
+                        logger.info("Auto-expired root session for user %s", user_id)
                 await asyncio.sleep(60)
-            
             except Exception as e:
-                logger.error(f"Error in session cleanup: {e}")
+                logger.error("Error in session cleanup: %s", e)
                 await asyncio.sleep(60)
-    
+
     @classmethod
-    def get_active_sessions(cls) -> Dict[int, Dict[str, any]]:
-        """
-        Get all active sessions (for debugging/admin).
-        
-        Returns:
-            Dictionary of active sessions by user_id
-        """
+    def get_active_sessions(cls) -> Dict[int, Dict[str, Any]]:
         active = {}
         for user_id in list(cls._sessions.keys()):
             info = cls.get_session_info(user_id)
             if info:
                 active[user_id] = info
-        
         return active

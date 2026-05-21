@@ -5,8 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: nas-telegram-bot
     restart: unless-stopped
-    # Secure defaults. Full NAS host mode:
-    # docker compose -f docker-compose.yml -f docker-compose.nas-host.yml up -d
+    privileged: true
+    pid: host
 
     # Environment variables (alternative to .env file)
     environment:
@@ -26,7 +26,7 @@ services:
       - LOG_FILE=/app/logs/bot.log
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - CONVERSATION_HISTORY_LENGTH=${CONVERSATION_HISTORY_LENGTH:-10}
-      - HOST_EXEC_MODE=${HOST_EXEC_MODE:-none}
+      - HOST_EXEC_MODE=${HOST_EXEC_MODE:-nsenter}
       - HOST_NSENTER_PID=${HOST_NSENTER_PID:-1}
       - HOST_SSH=${HOST_SSH:-}
       - HOST_SSH_EXTRA_ARGS=${HOST_SSH_EXTRA_ARGS:-}
@@ -63,8 +63,11 @@ services:
       - ./logs:/app/logs
       # Documents directory (for RAG) - read-write for uploads
       - ${DOCUMENT_PATH:-./documents}:/app/documents
-      # Optional: Mount .env file (prefer secrets in production)
-      - ./.env:/app/.env:ro
+      # NAS disk mount (entire disk for /cd root access)
+      - /srv/dev-disk-by-uuid-9ac22f70-05c6-442f-993b-0d9ca1ae5988:/srv/dev-disk-by-uuid-9ac22f70-05c6-442f-993b-0d9ca1ae5988
+      # Docker socket for container management
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Secrets: inject via `environment` / env_file — do not bind-mount .env into the container
 
     # Optional: Network configuration
     # networks:
