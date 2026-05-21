@@ -119,7 +119,25 @@ def ignore_temperature_sensor_for_alerts(sensor_key: str) -> bool:
 
 
 # Health Check Interval (minutes)
-HEALTH_CHECK_INTERVAL = 5
+HEALTH_CHECK_INTERVAL = int(os.getenv("HEALTH_CHECK_INTERVAL", "5"))
+
+# Autonomous troubleshooting (AI advisory reports on health alerts; no auto-remediation)
+_AUTOTROUBLESHOOT_SEVERITIES = frozenset({"info", "warning", "critical"})
+AUTOTROUBLESHOOT_ENABLED = _env_bool("AUTOTROUBLESHOOT_ENABLED", False)
+_min_sev = os.getenv("AUTOTROUBLESHOOT_MIN_SEVERITY", "warning").strip().lower()
+AUTOTROUBLESHOOT_MIN_SEVERITY = (
+    _min_sev if _min_sev in _AUTOTROUBLESHOOT_SEVERITIES else "warning"
+)
+AUTOTROUBLESHOOT_COOLDOWN_MINUTES = int(os.getenv("AUTOTROUBLESHOOT_COOLDOWN_MINUTES", "120"))
+AUTOTROUBLESHOOT_MAX_ALERTS_PER_RUN = int(os.getenv("AUTOTROUBLESHOOT_MAX_ALERTS_PER_RUN", "5"))
+AUTOTROUBLESHOOT_USE_THINKING = _env_bool("AUTOTROUBLESHOOT_USE_THINKING", False)
+AUTOTROUBLESHOOT_MODEL = os.getenv("AUTOTROUBLESHOOT_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+AUTOTROUBLESHOOT_MAX_TOKENS = int(os.getenv("AUTOTROUBLESHOOT_MAX_TOKENS", "2500"))
+AUTOTROUBLESHOOT_EVIDENCE_MAX_CHARS = int(os.getenv("AUTOTROUBLESHOOT_EVIDENCE_MAX_CHARS", "12000"))
+AUTOTROUBLESHOOT_ACK_ALERTS = _env_bool("AUTOTROUBLESHOOT_ACK_ALERTS", True)
+AUTOTROUBLESHOOT_SCAN_UNACK = _env_bool("AUTOTROUBLESHOOT_SCAN_UNACK", True)
+AUTOTROUBLESHOOT_UNACK_SCAN_HOURS = int(os.getenv("AUTOTROUBLESHOOT_UNACK_SCAN_HOURS", "6"))
+AUTOTROUBLESHOOT_UNACK_MAX_AGE_HOURS = int(os.getenv("AUTOTROUBLESHOOT_UNACK_MAX_AGE_HOURS", "24"))
 
 # Host command execution (OMV / apt on host from container)
 # Use "nsenter" with docker pid: host + privileged, or "ssh" with HOST_SSH=user@nas
