@@ -15,6 +15,7 @@ import config
 from ai.agent_telegram import AgentTelegramBindings
 from ai.bot_command_catalog import BOT_COMMAND_CATALOG
 from ai.gpt_client import generate_with_thinking, generate_with_tools_loop, summarize_text
+from ai.prompt_scope import with_nas_scope
 from ai.search_engine import search_web, is_search_available
 from ai.conversation_history import ConversationManager
 from database.memory import save_conversation, save_command
@@ -136,7 +137,7 @@ async def execute_chat(
         response = await generate_with_tools_loop(
             prompt=message,
             context=full_ctx,
-            system_prompt=(
+            system_prompt=with_nas_scope(
                 "You are a DevOps and NAS assistant running inside a Telegram bot. "
                 "You have tools for THIS host: temperature sensors, health score, **nas_cpu_stats** (per-core/thread CPU like `/cpu`), all disk mounts, "
                 "network stats, SMART drive summary, per-device SMART detail, OpenMediaVault disk/filesystem/SMART RPC "
@@ -267,7 +268,7 @@ async def execute_analyze(
                 "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** is allow-listed read-only host "
                 "diagnostics via SSH/nsenter (fixed argv, not arbitrary shell); it **does not** replace **`/ssh`**. "
             )
-        analyze_system = (
+        analyze_system = with_nas_scope(
             "You are an expert technical assistant with deep reasoning. "
             "You have tools for THIS host: temperature sensors, health score, **nas_cpu_stats** (per-core/thread CPU), disk partitions, network, "
             "SMART drives, per-device SMART detail, OpenMediaVault disk/filesystem/SMART views when RPC is available, "

@@ -21,6 +21,7 @@ from ai.bot_command_catalog import BOT_COMMAND_CATALOG
 from ai.document_loader import load_directory, chunk_text
 from ai.embeddings import embed_text, embed_batch, is_embeddings_available
 from ai.gpt_client import generate_with_thinking, generate_with_tools_loop
+from ai.prompt_scope import with_nas_scope
 from ai.conversation_history import ConversationManager
 from ai.search_engine import get_search_context, is_search_available
 
@@ -272,7 +273,7 @@ async def ask(
                 "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** may appear: allow-listed read-only "
                 "host diagnostics over SSH/nsenter (fixed argv, not arbitrary shell); it **does not** replace **`/ssh`**. "
             )
-        rag_system = (
+        rag_system = with_nas_scope(
             "You are a helpful AI assistant for a NAS Telegram bot. Answer using the provided context. "
             "The command reference describes what users can type in Telegram. "
             "You have tools to read live data from this host (temperatures, **nas_cpu_stats** for per-core CPU, disks, SMART, Docker, OpenMediaVault RPC when available, etc.). "
