@@ -26,16 +26,22 @@ from services.system_monitor import (
 )
 from utils.formatters import format_error_html
 from utils.formatters import docker_storage as fmt
-from utils.security import require_auth, rate_limit
+from utils.security import (
+    require_auth,
+    rate_limit,
+    reject_unauthorized_callback,
+    callback_data_for_user,
+    parse_callback_user_id,
+)
 from utils.telegram_reply import reply_text_chunked, reply_text_safe
 
 logger = logging.getLogger(__name__)
 
-CB_DCLEAN_CONFIRM = "dclean_confirm"
-CB_DCLEAN_CANCEL = "dclean_cancel"
-CB_DAGG_STEP1 = "daggressive_step1_yes"
-CB_DAGG_CANCEL = "daggressive_cancel"
-CB_DAGG_CONFIRM = "daggressive_confirm"
+CB_DCLEAN_CONFIRM = "cln"
+CB_DCLEAN_CANCEL = "clc"
+CB_DAGG_STEP1 = "ag1"
+CB_DAGG_CANCEL = "agc"
+CB_DAGG_CONFIRM = "agf"
 
 _kw = {"parse_mode": ParseMode.HTML}
 
@@ -248,8 +254,14 @@ async def dclean_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     keyboard = [
         [
-            InlineKeyboardButton("✅ Run cleanup", callback_data=CB_DCLEAN_CONFIRM),
-            InlineKeyboardButton("❌ Cancel", callback_data=CB_DCLEAN_CANCEL),
+            InlineKeyboardButton(
+                "✅ Run cleanup",
+                callback_data=callback_data_for_user(CB_DCLEAN_CONFIRM, user_id),
+            ),
+            InlineKeyboardButton(
+                "❌ Cancel",
+                callback_data=callback_data_for_user(CB_DCLEAN_CANCEL, user_id),
+            ),
         ]
     ]
     await reply_text_safe(update, text, reply_markup=InlineKeyboardMarkup(keyboard), **_kw)
@@ -258,10 +270,17 @@ async def dclean_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_auth
 @rate_limit
 async def daggressive_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     keyboard = [
         [
-            InlineKeyboardButton("⚠️ Continue", callback_data=CB_DAGG_STEP1),
-            InlineKeyboardButton("❌ Cancel", callback_data=CB_DAGG_CANCEL),
+            InlineKeyboardButton(
+                "⚠️ Continue",
+                callback_data=callback_data_for_user(CB_DAGG_STEP1, user_id),
+            ),
+            InlineKeyboardButton(
+                "❌ Cancel",
+                callback_data=callback_data_for_user(CB_DAGG_CANCEL, user_id),
+            ),
         ]
     ]
     await reply_text_safe(
@@ -280,6 +299,8 @@ async def daggressive_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def handle_storage_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query or not query.data:
+        return
+    if await reject_unauthorized_callback(query):
         return
     await query.answer()
     data = query.data
@@ -309,7 +330,7 @@ async def handle_storage_callbacks(update: Update, context: ContextTypes.DEFAULT
         keyboard = [
             [
                 InlineKeyboardButton("✅ CONFIRM aggressive cleanup", callback_data=CB_DAGG_CONFIRM),
-                InlineKeyboardButton("❌ Cancel", callback_data=CB_DAGG_CANCEL),
+                InlineKeyboardButton("❌ Cancel", callback_data=callback_data_for_user(CB_DAGG_CANCEL, user_id)),
             ]
         ]
         await query.edit_message_text(

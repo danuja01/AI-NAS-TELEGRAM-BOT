@@ -6,15 +6,21 @@ Allows temporary elevated access to all file system paths.
 import logging
 import subprocess
 import asyncio
+import shlex
 from pathlib import Path
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from utils.security import require_auth, rate_limit
+from utils.security import (
+    require_auth,
+    rate_limit,
+    ssh_command_has_shell_metacharacters,
+)
 from utils.formatters import format_success, format_error
 from utils.root_session import RootSessionManager
 from utils.followup_state import (
+    clear_all_followup,
     set_cmd_pending_exclusive,
     FOLLOWUP_ROOTLOGIN,
     FOLLOWUP_SSH,
@@ -110,6 +116,7 @@ async def rootlogout_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     try:
         if RootSessionManager.logout(user_id):
+            clear_all_followup(context)
             await update.message.reply_text(
                 format_success(
                     "🔒 **Root Session Ended**\n\n"
@@ -193,29 +200,59 @@ async def ssh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def run_ssh_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, command: str
 ):
-    """Execute shell via /ssh (single message or follow-up)."""
-    # This makes 'ls' show documents folder instead of /app (bot code)
-    if not command.startswith('cd ') and not command.startswith('/'):
-        command = f'cd /app/documents && {command}'
-    
+    """Execute a single argv command via /ssh (no shell; root session required)."""
+    if not RootSessionManager.is_root_session_active(user_id):
+        await update.message.reply_text(
+            format_error(
+                "❌ **Root Access Required**\n\n"
+                "The `/ssh` command requires an active root session.\n"
+                "Use `/rootlogin <password>` to gain access."
+            )
+        )
+        return
+
+    command = command.strip()
+    if not command:
+        await update.message.reply_text(format_error("Empty command."))
+        return
+
+    if ssh_command_has_shell_metacharacters(command):
+        await update.message.reply_text(
+            format_error(
+                "❌ **Rejected**\n\n"
+                "Shell metacharacters (`|`, `;`, `&`, `$()`, etc.) are not allowed. "
+                "Run one program with arguments (no pipes or subshells)."
+            )
+        )
+        return
+
     try:
-        # Log the command execution
-        logger.warning(f"User {user_id} executing SSH command: {command}")
-        
-        # Send a "processing" message
+        argv = shlex.split(command)
+    except ValueError as e:
+        await update.message.reply_text(format_error(f"Invalid command syntax: {e}"))
+        return
+
+    if not argv:
+        await update.message.reply_text(format_error("Empty command."))
+        return
+
+    exec_kwargs = {
+        "stdout": asyncio.subprocess.PIPE,
+        "stderr": asyncio.subprocess.PIPE,
+    }
+    if not command.startswith("cd "):
+        exec_kwargs["cwd"] = "/app/documents"
+
+    try:
+        logger.warning("User %s executing /ssh argv=%s", user_id, argv[:3])
+
         status_msg = await update.message.reply_text(
             f"⚙️ Executing: `{command}`...",
-            parse_mode='Markdown'
+            parse_mode="Markdown",
         )
-        
-        # Execute the command with a timeout
-        process = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            shell=True
-        )
-        
+
+        process = await asyncio.create_subprocess_exec(*argv, **exec_kwargs)
+
         try:
             # Wait for command with 60 second timeout
             stdout, stderr = await asyncio.wait_for(

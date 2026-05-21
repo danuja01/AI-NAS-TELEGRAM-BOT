@@ -107,9 +107,9 @@ _HELP_KEYBOARD = InlineKeyboardMarkup(
 
 
 def _help_user_allowed(user_id: int) -> bool:
-    if not config.ALLOWED_USER_IDS:
-        return True
-    return user_id in config.ALLOWED_USER_IDS
+    from utils.security import is_user_authorized
+
+    return is_user_authorized(user_id)
 
 
 @require_auth

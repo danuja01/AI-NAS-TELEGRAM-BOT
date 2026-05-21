@@ -123,7 +123,7 @@ HEALTH_CHECK_INTERVAL = 5
 
 # Host command execution (OMV / apt on host from container)
 # Use "nsenter" with docker pid: host + privileged, or "ssh" with HOST_SSH=user@nas
-HOST_EXEC_MODE = os.getenv("HOST_EXEC_MODE", "nsenter").strip().lower()
+HOST_EXEC_MODE = os.getenv("HOST_EXEC_MODE", "none").strip().lower()
 HOST_NSENTER_PID = int(os.getenv("HOST_NSENTER_PID", "1"))
 HOST_SSH = os.getenv("HOST_SSH", "").strip()
 HOST_SSH_EXTRA_ARGS = [
@@ -207,7 +207,9 @@ def validate_config():
         errors.append("OPENAI_API_KEY is required")
     
     if not ALLOWED_USER_IDS:
-        print("⚠️  WARNING: No ALLOWED_USER_IDS set. Bot will be accessible to anyone!")
+        errors.append(
+            "ALLOWED_USER_IDS is required (comma-separated Telegram user IDs)"
+        )
     
     if errors:
         raise ValueError(f"Configuration errors: {', '.join(errors)}")
