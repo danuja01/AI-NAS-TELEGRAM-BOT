@@ -64,11 +64,16 @@ jobs:
           ssh-private-key: ${{ secrets.NAS_SSH_PRIVATE_KEY }}
 
       - name: Install SSH known_hosts
-        if: secrets.NAS_SSH_KNOWN_HOSTS != ''
+        env:
+          NAS_SSH_KNOWN_HOSTS: ${{ secrets.NAS_SSH_KNOWN_HOSTS }}
         run: |
+          if [ -z "${NAS_SSH_KNOWN_HOSTS:-}" ]; then
+            echo "NAS_SSH_KNOWN_HOSTS not set; SSH will use StrictHostKeyChecking=accept-new"
+            exit 0
+          fi
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "${{ secrets.NAS_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          printf '%s\n' "${NAS_SSH_KNOWN_HOSTS}" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Deploy on NAS
