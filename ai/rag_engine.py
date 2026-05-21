@@ -275,7 +275,7 @@ async def ask(
         rag_system = (
             "You are a helpful AI assistant for a NAS Telegram bot. Answer using the provided context. "
             "The command reference describes what users can type in Telegram. "
-            "You have tools to read live data from this host (temperatures, disks, SMART, Docker, OpenMediaVault RPC when available, etc.). "
+            "You have tools to read live data from this host (temperatures, **nas_cpu_stats** for per-core CPU, disks, SMART, Docker, OpenMediaVault RPC when available, etc.). "
             "You may call **nas_request_docker_restart** or **nas_request_docker_stop** to post the same inline "
             "Confirm/Cancel prompts as /drestart and /dstop; nothing runs until the user confirms. "
             + rag_ro
@@ -284,7 +284,8 @@ async def ask(
             "automated alerts); treat it as what the user refers to. "
             + "Put bot slash commands in markdown inline code (/command with backticks), not * or ** around commands. "
             + "Do not use markdown pipe tables in replies; use bullet lists. "
-            "If the question is about the user's own NAS state, call tools first; do not invent readings. "
+            + "If the question is about the user's own NAS state, call tools first; do not invent readings. "
+            "For **per-core CPU**, call **nas_cpu_stats** (or **nas_system_health_snapshot**) before claiming data is unavailable. "
             "If the context does not contain the answer, say so. Be concise and accurate."
         )
 

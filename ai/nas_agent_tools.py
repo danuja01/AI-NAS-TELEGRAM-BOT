@@ -32,6 +32,7 @@ from services.omv_client import (
 )
 from services.system_monitor import (
     calculate_health_score,
+    get_cpu_stats,
     get_disk_stats,
     get_memory_stats,
     get_network_stats,
@@ -156,6 +157,16 @@ _NAS_AGENT_TOOLS_BASE: List[Dict[str, Any]] = [
         ),
     ),
     _tool_entry(
+        "nas_cpu_stats",
+        (
+            "CPU utilization for THIS host: **overall percent**, **one percent value per logical CPU thread** "
+            "(same source as Telegram `/cpu`), load averages 1/5/15, physical vs logical core counts, optional CPU frequency. "
+            "You MUST call this when the user asks about **per-core**, per-thread, per-CPU, or 'which core is busy' — "
+            "never claim per-core data is unavailable without calling this tool (or `nas_system_health_snapshot`, "
+            "which also returns a per-core list)."
+        ),
+    ),
+    _tool_entry(
         "nas_disk_partitions",
         (
             "List mounted disk partitions with used/free GB and usage percent (like /disk). "
@@ -232,8 +243,10 @@ _NAS_AGENT_TOOLS_BASE: List[Dict[str, Any]] = [
     _tool_entry(
         "nas_system_health_snapshot",
         (
-            "Quick live snapshot: CPU %, load average, memory %, swap, temperature sensors, sample disks, uptime. "
-            "Use as a one-shot overview or after other focused tools if you still need CPU/load + temps together."
+            "Quick live snapshot: overall CPU %, **cpu_percent_per_logical_core** (one value per thread), load average, "
+            "memory %, swap, temperature sensors, sample disks, uptime. "
+            "Prefer **nas_cpu_stats** for CPU-only questions (includes load + core counts + freq like `/cpu`). "
+            "Use this snapshot as a one-shot overview or when you need CPU breakdown plus temps/disks together."
         ),
     ),
     _tool_entry(
@@ -703,9 +716,55 @@ def _storage_paths() -> str:
         return json.dumps({"ok": False, "error": str(e)})
 
 
+def _cpu_stats() -> str:
+    """Full CPU stats including per-logical-core percents (matches Telegram /cpu)."""
+    try:
+        raw = get_cpu_stats()
+        if not isinstance(raw, dict):
+            return json.dumps({"ok": False, "error": "invalid cpu stats"})
+        err = raw.get("error")
+        per = raw.get("per_cpu")
+        if err and not per:
+            return json.dumps({"ok": False, "error": str(err)})
+        per_list = per if isinstance(per, (list, tuple)) else []
+        try:
+            per_rounded = [round(float(x), 1) for x in per_list]
+        except (TypeError, ValueError):
+            per_rounded = []
+        payload: Dict[str, Any] = {
+            "ok": True,
+            "note": "Aligned with Telegram `/cpu`: psutil overall and per-logical-thread cpu_percent samples.",
+            "cpu_percent_overall": round(float(raw.get("percent", 0)), 1),
+            "cpu_percent_per_logical_core": per_rounded,
+            "physical_cores": raw.get("cores"),
+            "logical_threads": raw.get("threads"),
+        }
+        la = raw.get("load_avg")
+        if isinstance(la, (list, tuple)) and len(la) >= 3:
+            payload["load_average_1_5_15"] = [round(float(la[0]), 2), round(float(la[1]), 2), round(float(la[2]), 2)]
+        elif la:
+            try:
+                payload["load_average"] = [round(float(x), 2) for x in la]
+            except (TypeError, ValueError):
+                pass
+        freq = raw.get("frequency")
+        if isinstance(freq, dict) and freq.get("current") is not None:
+            try:
+                payload["cpu_freq_mhz_current"] = round(float(freq["current"]), 0)
+            except (TypeError, ValueError):
+                pass
+        return json.dumps(payload, default=str)
+    except Exception as e:
+        logger.exception("nas_cpu_stats")
+        return json.dumps({"ok": False, "error": str(e)})
+
+
 def _system_snapshot() -> str:
     try:
-        cpu_percent = float(psutil.cpu_percent(interval=0.25))
+        per_core = psutil.cpu_percent(interval=0.45, percpu=True)
+        cpu_percent = (
+            round(sum(per_core) / max(len(per_core), 1), 1) if per_core else 0.0
+        )
         load_avg: tuple[float, ...] | tuple[()] = ()
         if hasattr(psutil, "getloadavg"):
             try:
@@ -732,6 +791,8 @@ def _system_snapshot() -> str:
         payload = {
             "ok": True,
             "cpu_percent": round(cpu_percent, 1),
+            "cpu_percent_per_logical_core": [round(float(x), 1) for x in per_core],
+            "cpu_logical_threads": psutil.cpu_count(logical=True),
             "load_average": [round(x, 2) for x in load_avg] if load_avg else None,
             "memory_percent": round(mem.get("percent", 0), 1) if isinstance(mem, dict) else None,
             "memory_used_gb": round(mem.get("used_gb", 0), 2) if isinstance(mem, dict) else None,
@@ -756,6 +817,8 @@ def run_nas_tool(function_name: str, arguments: Dict[str, Any] | None) -> str:
             return _temperature_sensors()
         if function_name == "nas_health_score":
             return _health_score()
+        if function_name == "nas_cpu_stats":
+            return _cpu_stats()
         if function_name == "nas_disk_partitions":
             return _disk_partitions()
         if function_name == "nas_network_interfaces":

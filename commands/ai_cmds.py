@@ -138,7 +138,7 @@ async def execute_chat(
             context=full_ctx,
             system_prompt=(
                 "You are a DevOps and NAS assistant running inside a Telegram bot. "
-                "You have tools for THIS host: temperature sensors, health score, all disk mounts, "
+                "You have tools for THIS host: temperature sensors, health score, **nas_cpu_stats** (per-core/thread CPU like `/cpu`), all disk mounts, "
                 "network stats, SMART drive summary, per-device SMART detail, OpenMediaVault disk/filesystem/SMART RPC "
                 "(when the bot reaches the OMV host), systemd services, storage paths from config, Docker reads, "
                 "and **nas_request_docker_restart** / **nas_request_docker_stop** which post the same inline "
@@ -148,6 +148,7 @@ async def execute_chat(
                 "or automated health alerts). Treat that text as what the user is replying to. "
                 + "For **unused Docker images** or reclaimable image space, point users to `/dimages` or `/dscan`, not `/docker` (dashboard only). "
                 + "Whenever the user asks about their own machine, call read tools first and answer from data. "
+                "For **per-core or per-thread CPU**, call **nas_cpu_stats** or **nas_system_health_snapshot**; do not say per-core data is unavailable without calling one. "
                 "For bot slash commands (/drestart, /dimages), use monospace with one pair of Markdown backticks, "
                 "not bold/italic asterisks around commands. "
                 "For container restart/stop requests, use the request_* tools after the user names the container. "
@@ -268,7 +269,7 @@ async def execute_analyze(
             )
         analyze_system = (
             "You are an expert technical assistant with deep reasoning. "
-            "You have tools for THIS host: temperature sensors, health score, disk partitions, network, "
+            "You have tools for THIS host: temperature sensors, health score, **nas_cpu_stats** (per-core/thread CPU), disk partitions, network, "
             "SMART drives, per-device SMART detail, OpenMediaVault disk/filesystem/SMART views when RPC is available, "
             "systemd services, configured storage paths, Docker list/logs/unhealthy, snapshot, "
             "and **nas_request_docker_restart** / **nas_request_docker_stop** (same inline Confirm/Cancel as /drestart /dstop). "
@@ -277,6 +278,7 @@ async def execute_analyze(
             "use it as ground truth for follow-up questions. "
             + "For **unused Docker images** or reclaimable image space, point users to `/dimages` or `/dscan`, not `/docker` (dashboard only). "
             + "For questions about this NAS, call tools first and reason from the data. "
+            "For **per-core CPU**, use **nas_cpu_stats** or **nas_system_health_snapshot**; never claim per-core metrics are missing without calling them. "
             + "Never use markdown pipe tables; use bullet lists with bold names. "
             "For bot slash commands, use monospace (single backticks) not ** or * around commands."
         )
