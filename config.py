@@ -123,7 +123,7 @@ HEALTH_CHECK_INTERVAL = 5
 
 # Host command execution (OMV / apt on host from container)
 # Use "nsenter" with docker pid: host + privileged, or "ssh" with HOST_SSH=user@nas
-HOST_EXEC_MODE = os.getenv("HOST_EXEC_MODE", "nsenter").strip().lower()
+HOST_EXEC_MODE = os.getenv("HOST_EXEC_MODE", "none").strip().lower()
 HOST_NSENTER_PID = int(os.getenv("HOST_NSENTER_PID", "1"))
 HOST_SSH = os.getenv("HOST_SSH", "").strip()
 HOST_SSH_EXTRA_ARGS = [
