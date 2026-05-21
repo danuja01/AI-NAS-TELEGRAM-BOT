@@ -6,7 +6,13 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from utils.security import require_auth, rate_limit
+from utils.security import (
+    require_auth,
+    rate_limit,
+    reject_unauthorized_callback,
+    callback_data_for_user,
+    parse_callback_user_id,
+)
 from services.readonly.constants import MAX_DOCKER_HOST_LOG_LINES
 from utils.formatters import format_docker_containers, format_error, format_success
 from utils.followup_state import (
@@ -169,7 +175,7 @@ async def send_restart_confirmation(
     try:
         keyboard = [
             [
-                InlineKeyboardButton("✅ Confirm", callback_data=f"drestart_confirm_{container_name}"),
+                InlineKeyboardButton("✅ Confirm", callback_data=callback_data_for_user("dr", user_id, container_name)),
                 InlineKeyboardButton("❌ Cancel", callback_data="cancel"),
             ]
         ]
@@ -190,7 +196,7 @@ async def send_stop_confirmation(
     try:
         keyboard = [
             [
-                InlineKeyboardButton("✅ Confirm", callback_data=f"dstop_confirm_{container_name}"),
+                InlineKeyboardButton("✅ Confirm", callback_data=callback_data_for_user("ds", user_id, container_name)),
                 InlineKeyboardButton("❌ Cancel", callback_data="cancel"),
             ]
         ]
@@ -241,12 +247,43 @@ async def run_logs(
 
 async def handle_docker_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    if await reject_unauthorized_callback(query):
+        return
     await query.answer()
     data = query.data
+    user_id = update.effective_user.id
     if data == "cancel":
         await query.edit_message_text("❌ Action cancelled")
         return
     try:
+        uid, container_name = parse_callback_user_id(data, "dr")
+        if uid is not None:
+            if uid != user_id:
+                await query.edit_message_text("🚫 This confirmation is for another user.")
+                return
+            await query.edit_message_text(f"🔄 Restarting `{container_name}`...")
+            restart_container(container_name)
+            await query.edit_message_text(
+                format_success(f"Container `{container_name}` restarted successfully"),
+                parse_mode="Markdown",
+            )
+            await save_command(user_id, f"/drestart {container_name}", "Container restarted")
+            return
+
+        uid, container_name = parse_callback_user_id(data, "ds")
+        if uid is not None:
+            if uid != user_id:
+                await query.edit_message_text("🚫 This confirmation is for another user.")
+                return
+            await query.edit_message_text(f"🛑 Stopping `{container_name}`...")
+            stop_container(container_name)
+            await query.edit_message_text(
+                format_success(f"Container `{container_name}` stopped successfully"),
+                parse_mode="Markdown",
+            )
+            await save_command(user_id, f"/dstop {container_name}", "Container stopped")
+            return
+
         if data.startswith("drestart_confirm_"):
             container_name = data.replace("drestart_confirm_", "", 1)
             await query.edit_message_text(f"🔄 Restarting `{container_name}`...")
@@ -255,7 +292,6 @@ async def handle_docker_confirmation(update: Update, context: ContextTypes.DEFAU
                 format_success(f"Container `{container_name}` restarted successfully"),
                 parse_mode="Markdown",
             )
-            user_id = update.effective_user.id
             await save_command(user_id, f"/drestart {container_name}", "Container restarted")
         elif data.startswith("dstop_confirm_"):
             container_name = data.replace("dstop_confirm_", "", 1)
@@ -265,7 +301,6 @@ async def handle_docker_confirmation(update: Update, context: ContextTypes.DEFAU
                 format_success(f"Container `{container_name}` stopped successfully"),
                 parse_mode="Markdown",
             )
-            user_id = update.effective_user.id
             await save_command(user_id, f"/dstop {container_name}", "Container stopped")
         elif data.startswith("restart_confirm_") or data.startswith("stop_confirm_"):
             await query.edit_message_text(

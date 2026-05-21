@@ -23,6 +23,50 @@ logger = logging.getLogger(__name__)
 # Rate limiting storage: {user_id: deque of timestamps}
 rate_limit_storage = defaultdict(lambda: deque(maxlen=config.MAX_COMMANDS_PER_MINUTE))
 
+_SHELL_METACHAR_PATTERN = re.compile(r"[|;&`$()<>\n\r]|(?:\$\()")
+
+
+def is_user_authorized(user_id: int) -> bool:
+    return bool(config.ALLOWED_USER_IDS) and user_id in config.ALLOWED_USER_IDS
+
+
+def ssh_command_has_shell_metacharacters(command: str) -> bool:
+    return bool(_SHELL_METACHAR_PATTERN.search(command))
+
+
+async def reject_unauthorized_callback(query) -> bool:
+    user = query.from_user
+    if user and is_user_authorized(user.id):
+        return False
+    uid = user.id if user else "unknown"
+    log_security_event("unauthorized_callback", uid, f"data={query.data!r}")
+    await query.answer("Unauthorized.", show_alert=True)
+    if query.message:
+        await query.edit_message_text("🚫 Unauthorized.")
+    return True
+
+
+def callback_data_for_user(prefix: str, user_id: int, suffix: str = "") -> str:
+    base = f"{prefix}:{user_id}"
+    if suffix:
+        base = f"{base}:{suffix}"
+    if len(base) > 64:
+        raise ValueError(f"callback_data too long ({len(base)} bytes)")
+    return base
+
+
+def parse_callback_user_id(data: str, prefix: str) -> tuple:
+    head = f"{prefix}:"
+    if not data.startswith(head):
+        return None, ""
+    rest = data[len(head):]
+    parts = rest.split(":", 1)
+    try:
+        uid = int(parts[0])
+    except ValueError:
+        return None, ""
+    return uid, (parts[1] if len(parts) > 1 else "")
+
 
 def require_auth(func: Callable) -> Callable:
     """
@@ -32,14 +76,8 @@ def require_auth(func: Callable) -> Callable:
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user = update.effective_user
-        
-        # If no allowed users configured, allow all (with warning)
-        if not config.ALLOWED_USER_IDS:
-            logger.warning(f"No ALLOWED_USER_IDS configured. Allowing user {user.id}")
-            return await func(update, context, *args, **kwargs)
-        
-        # Check if user is authorized
-        if user.id not in config.ALLOWED_USER_IDS:
+
+        if not is_user_authorized(user.id):
             logger.warning(f"Unauthorized access attempt by user {user.id} ({user.username})")
             await reply_text_safe(
                 update,

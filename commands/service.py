@@ -6,7 +6,13 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from utils.security import require_auth, rate_limit
+from utils.security import (
+    require_auth,
+    rate_limit,
+    reject_unauthorized_callback,
+    callback_data_for_user,
+    parse_callback_user_id,
+)
 from utils.formatters import format_error, format_success
 from utils.followup_state import set_cmd_pending_exclusive, FOLLOWUP_RESTART_SERVICE
 from services.service_manager import (
@@ -74,7 +80,10 @@ async def send_restart_service_confirmation(
     try:
         keyboard = [
             [
-                InlineKeyboardButton("✅ Confirm", callback_data=f"restart_svc_{service_name}"),
+                InlineKeyboardButton(
+                    "✅ Confirm",
+                    callback_data=callback_data_for_user("rs", user_id, service_name),
+                ),
                 InlineKeyboardButton("❌ Cancel", callback_data="cancel"),
             ]
         ]
@@ -113,7 +122,7 @@ async def reboot_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Send confirmation with double-check
         keyboard = [
             [
-                InlineKeyboardButton("✅ YES, REBOOT", callback_data="reboot_confirm"),
+                InlineKeyboardButton("✅ YES, REBOOT", callback_data=callback_data_for_user("rb", update.effective_user.id)),
                 InlineKeyboardButton("❌ Cancel", callback_data="cancel")
             ]
         ]
@@ -141,7 +150,7 @@ async def shutdown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Send confirmation with double-check
         keyboard = [
             [
-                InlineKeyboardButton("✅ YES, SHUTDOWN", callback_data="shutdown_confirm"),
+                InlineKeyboardButton("✅ YES, SHUTDOWN", callback_data=callback_data_for_user("sd", update.effective_user.id)),
                 InlineKeyboardButton("❌ Cancel", callback_data="cancel")
             ]
         ]
@@ -164,57 +173,84 @@ async def shutdown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle all confirmation callbacks."""
     query = update.callback_query
+    if await reject_unauthorized_callback(query):
+        return
     await query.answer()
-    
+
     data = query.data
     user_id = update.effective_user.id
-    
+
     if data == "cancel":
         await query.edit_message_text("❌ Action cancelled")
         return
-    
+
     try:
-        # Handle service restart confirmation
-        if data.startswith("restart_svc_"):
-            service_name = data.replace("restart_svc_", "")
+        uid, service_name = parse_callback_user_id(data, "rs")
+        if uid is not None:
+            if uid != user_id:
+                await query.edit_message_text("🚫 This confirmation is for another user.")
+                return
             await query.edit_message_text(f"🔄 Restarting service `{service_name}`...")
-            
             restart_service(service_name)
-            
             await query.edit_message_text(
                 format_success(f"Service `{service_name}` restarted successfully"),
-                parse_mode='Markdown'
+                parse_mode="Markdown",
             )
-            
-            await save_conversation(user_id, 'user', f'/restart_service {service_name}')
-            await save_conversation(user_id, 'assistant', f"Restarted service {service_name}")
-            await save_command(user_id, f'/restart_service {service_name}', 'Service restarted')
-        
-        # Handle reboot confirmation
+            await save_conversation(user_id, "user", f"/restart_service {service_name}")
+            await save_conversation(user_id, "assistant", f"Restarted service {service_name}")
+            await save_command(user_id, f"/restart_service {service_name}", "Service restarted")
+            return
+
+        uid, _ = parse_callback_user_id(data, "rb")
+        if uid is not None:
+            if uid != user_id:
+                await query.edit_message_text("🚫 This confirmation is for another user.")
+                return
+            await query.edit_message_text(
+                "🔄 **REBOOTING SYSTEM NOW**\n\nThe bot will be offline until the system restarts."
+            )
+            await save_conversation(user_id, "user", "/reboot")
+            await save_conversation(user_id, "assistant", "System reboot initiated")
+            await save_command(user_id, "/reboot", "System rebooting")
+            reboot_system()
+            return
+
+        uid, _ = parse_callback_user_id(data, "sd")
+        if uid is not None:
+            if uid != user_id:
+                await query.edit_message_text("🚫 This confirmation is for another user.")
+                return
+            await query.edit_message_text(
+                "🛑 **SHUTTING DOWN SYSTEM NOW**\n\nPhysical access will be required to restart."
+            )
+            await save_conversation(user_id, "user", "/shutdown")
+            await save_conversation(user_id, "assistant", "System shutdown initiated")
+            await save_command(user_id, "/shutdown", "System shutting down")
+            shutdown_system()
+            return
+
+        if data.startswith("restart_svc_"):
+            service_name = data.replace("restart_svc_", "", 1)
+            await query.edit_message_text(f"🔄 Restarting service `{service_name}`...")
+            restart_service(service_name)
+            await query.edit_message_text(
+                format_success(f"Service `{service_name}` restarted successfully"),
+                parse_mode="Markdown",
+            )
+            await save_command(user_id, f"/restart_service {service_name}", "Service restarted")
         elif data == "reboot_confirm":
             await query.edit_message_text("🔄 **REBOOTING SYSTEM NOW**\n\nThe bot will be offline until the system restarts.")
-            
-            await save_conversation(user_id, 'user', '/reboot')
-            await save_conversation(user_id, 'assistant', 'System reboot initiated')
-            await save_command(user_id, '/reboot', 'System rebooting')
-            
+            await save_command(user_id, "/reboot", "System rebooting")
             reboot_system()
-        
-        # Handle shutdown confirmation
         elif data == "shutdown_confirm":
             await query.edit_message_text("🛑 **SHUTTING DOWN SYSTEM NOW**\n\nPhysical access will be required to restart.")
-            
-            await save_conversation(user_id, 'user', '/shutdown')
-            await save_conversation(user_id, 'assistant', 'System shutdown initiated')
-            await save_command(user_id, '/shutdown', 'System shutting down')
-            
+            await save_command(user_id, "/shutdown", "System shutting down")
             shutdown_system()
-        
-        # Handle Docker confirmations (delegated to docker_cmds module)
-        elif data.startswith(("drestart_confirm_", "dstop_confirm_", "restart_confirm_", "stop_confirm_")):
+        elif data.startswith(("dr:", "ds:", "drestart_confirm_", "dstop_confirm_", "restart_confirm_", "stop_confirm_")):
             from commands.docker_cmds import handle_docker_confirmation
+
             await handle_docker_confirmation(update, context)
-    
+
     except Exception as e:
         logger.error(f"Error in confirmation handler: {e}", exc_info=True)
-        await query.edit_message_text(format_error(f"Failed: {e}"), parse_mode='Markdown')
+        await query.edit_message_text(format_error(f"Failed: {e}"), parse_mode="Markdown")

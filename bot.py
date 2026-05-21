@@ -222,7 +222,7 @@ def main():
     application.add_handler(
         CallbackQueryHandler(
             docker_storage_cmds.handle_storage_callbacks,
-            pattern=r"^d(clean|aggressive)_",
+            pattern=r"^(cln|clc|ag1|agc|agf):\d+$|^d(clean|aggressive)_",
         )
     )
     
@@ -273,7 +273,7 @@ def main():
     application.add_handler(
         CallbackQueryHandler(
             operations.handle_operations_callback,
-            pattern=f"^({operations.CB_UPGRADE_CONFIRM}|{operations.CB_UPGRADE_CANCEL})$",
+            pattern=rf"^({operations.CB_UPGRADE_CONFIRM}|{operations.CB_UPGRADE_CANCEL}):\\d+$|^upgrade_omv_(confirm|cancel)$",
         )
     )
 

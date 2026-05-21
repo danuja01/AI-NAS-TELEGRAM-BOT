@@ -207,7 +207,9 @@ def validate_config():
         errors.append("OPENAI_API_KEY is required")
     
     if not ALLOWED_USER_IDS:
-        print("⚠️  WARNING: No ALLOWED_USER_IDS set. Bot will be accessible to anyone!")
+        errors.append(
+            "ALLOWED_USER_IDS is required (comma-separated Telegram user IDs)"
+        )
     
     if errors:
         raise ValueError(f"Configuration errors: {', '.join(errors)}")

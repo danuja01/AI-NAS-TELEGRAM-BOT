@@ -1,0 +1,16 @@
+# Optional overlay for full NAS host integration (privileged nsenter, Docker socket, disk mounts).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.nas-host.yml up -d
+#
+# Only use on a trusted NAS where the bot is restricted to ALLOWED_USER_IDS.
+
+services:
+  nas-bot:
+    privileged: true
+    pid: host
+    environment:
+      - HOST_EXEC_MODE=${HOST_EXEC_MODE:-nsenter}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Replace with your OMV disk UUID path:
+      - ${NAS_DISK_MOUNT:-/srv/dev-disk-by-uuid-9ac22f70-05c6-442f-993b-0d9ca1ae5988}:${NAS_DISK_MOUNT:-/srv/dev-disk-by-uuid-9ac22f70-05c6-442f-993b-0d9ca1ae5988}

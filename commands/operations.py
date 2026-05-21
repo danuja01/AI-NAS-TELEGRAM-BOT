@@ -15,13 +15,19 @@ from telegram.ext import ContextTypes
 import config
 from database.memory import save_command, save_conversation
 from services.host_runner import format_host_result_html, run_profile
-from utils.security import require_auth, rate_limit
+from utils.security import (
+    require_auth,
+    rate_limit,
+    reject_unauthorized_callback,
+    callback_data_for_user,
+    parse_callback_user_id,
+)
 from utils.telegram_reply import reply_text_safe
 
 logger = logging.getLogger(__name__)
 
-CB_UPGRADE_CONFIRM = "upgrade_omv_confirm"
-CB_UPGRADE_CANCEL = "upgrade_omv_cancel"
+CB_UPGRADE_CONFIRM = "ug"
+CB_UPGRADE_CANCEL = "ugc"
 
 
 def _maintenance_user_ids() -> List[int]:
@@ -111,8 +117,8 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [
-            InlineKeyboardButton("✅ Run omv-upgrade", callback_data=CB_UPGRADE_CONFIRM),
-            InlineKeyboardButton("❌ Cancel", callback_data=CB_UPGRADE_CANCEL),
+            InlineKeyboardButton("✅ Run omv-upgrade", callback_data=callback_data_for_user(CB_UPGRADE_CONFIRM, user_id)),
+            InlineKeyboardButton("❌ Cancel", callback_data=callback_data_for_user(CB_UPGRADE_CANCEL, user_id)),
         ]
     ]
     await reply_text_safe(
@@ -131,20 +137,40 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_operations_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle upgrade confirmation (register with pattern ^upgrade_omv_)."""
+    """Handle upgrade confirmation callbacks."""
     query = update.callback_query
     if not query or not query.data:
+        return
+    if await reject_unauthorized_callback(query):
         return
     await query.answer()
 
     user_id = update.effective_user.id
     chat_id = query.message.chat_id if query.message else update.effective_chat.id
+    data = query.data
 
-    if query.data == CB_UPGRADE_CANCEL:
+    uid, _ = parse_callback_user_id(data, CB_UPGRADE_CANCEL)
+    if uid is not None:
+        if uid != user_id:
+            await query.edit_message_text(
+                "🚫 This confirmation is for another user.", parse_mode=ParseMode.HTML
+            )
+            return
         await query.edit_message_text("❌ Upgrade cancelled.", parse_mode=ParseMode.HTML)
         return
 
-    if query.data != CB_UPGRADE_CONFIRM:
+    if data == "upgrade_omv_cancel":
+        await query.edit_message_text("❌ Upgrade cancelled.", parse_mode=ParseMode.HTML)
+        return
+
+    uid, _ = parse_callback_user_id(data, CB_UPGRADE_CONFIRM)
+    if uid is None and data != "upgrade_omv_confirm":
+        return
+
+    if uid is not None and uid != user_id:
+        await query.edit_message_text(
+            "🚫 This confirmation is for another user.", parse_mode=ParseMode.HTML
+        )
         return
 
     if not _is_maintenance(user_id):

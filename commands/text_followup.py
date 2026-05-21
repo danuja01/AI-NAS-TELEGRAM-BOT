@@ -29,7 +29,7 @@ from utils.followup_state import (
     FOLLOWUP_DOWNLOAD,
 )
 from utils.plain_text_ai_intent import plain_text_prefers_analyze
-from utils.security import enforce_message_rate_limit_reply
+from utils.security import enforce_message_rate_limit_reply, is_user_authorized
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ async def unified_pending_text_handler(update: Update, context: ContextTypes.DEF
     if not user or not update.message:
         return
     user_id = user.id
-    if config.ALLOWED_USER_IDS and user_id not in config.ALLOWED_USER_IDS:
+    if not is_user_authorized(user_id):
         return
 
     text = (update.message.text or "").strip()
