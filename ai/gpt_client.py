@@ -12,6 +12,7 @@ from openai import AsyncOpenAI
 import config
 from ai.agent_telegram import AgentTelegramBindings
 from ai.nas_agent_tools import get_nas_agent_tools, dispatch_nas_agent_tool
+from ai.prompt_scope import with_nas_scope
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ async def generate(
         model = config.DEFAULT_MODEL
     
     if system_prompt is None:
-        system_prompt = (
+        system_prompt = with_nas_scope(
             "You are a concise, technical DevOps assistant managing a NAS server. "
             "Provide helpful, accurate information with minimal verbosity. "
             "Focus on practical solutions and clear explanations."
@@ -151,7 +152,7 @@ async def generate_with_tools_loop(
                 " **nas_host_readonly_profile** calls allow-listed read-only host diagnostics via SSH/nsenter "
                 "(fixed argv — not arbitrary shell); it does **not** replace **`/ssh`**. "
             )
-        system_prompt = (
+        system_prompt = with_nas_scope(
             "You are a concise technical assistant for a NAS Telegram bot. "
             "You have tools for THIS host: temperatures, health score, **nas_cpu_stats** (per-core/thread CPU like `/cpu`), disks, network, SMART, "
             "per-device SMART detail, OpenMediaVault disk/filesystem/SMART RPC when the host exposes omv-rpc, systemd, "
@@ -257,7 +258,7 @@ async def generate_with_thinking(
         Generated text with reasoning
     """
     if system_prompt is None:
-        system_prompt = (
+        system_prompt = with_nas_scope(
             "You are an expert technical assistant with deep reasoning capabilities. "
             "Think through problems step by step and provide thorough, well-reasoned answers."
         )

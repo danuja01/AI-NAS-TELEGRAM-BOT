@@ -7,8 +7,9 @@ Keep in sync with `bot.TELEGRAM_BOT_COMMANDS` and `commands/basic.HELP_SECTION_B
 BOT_COMMAND_CATALOG = """
 # NAS Telegram bot — command reference
 
-You help users with this bot. Prefer exact command names below. Destructive actions use
-Telegram confirmations; tell users to run the command themselves when a confirmation UI is required.
+You help users with this NAS bot only (this server, storage, Docker here, OMV, homelab networking,
+or NAS-relevant technical knowledge). Decline unrelated topics briefly. Prefer exact command names below.
+Destructive actions use Telegram confirmations; tell users to run the command themselves when a confirmation UI is required.
 
 ## Monitoring
 - `/status` — Full system overview (CPU, RAM, disk, temps, uptime); may append OpenMediaVault filesystem usage when RPC works
