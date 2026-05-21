@@ -1,53 +1,42 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
-ENV/
 
-# Environment
-.env
-.env.nas
-
-# Logs
-logs/*.log
-*.log
-
-# Database
-data/*.db
-data/*.db-journal
-
-# ChromaDB
-data/chroma_db/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
 *~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Temporary files
-*.tmp
-*.temp
-
-# Model cache (sentence-transformers)
+*$py.class
 *.cache
 .cache/
-
-.DS_Store
-
-# docs
-docs/
-
-# db
+# ChromaDB
+# Database
 data/bot.db
 data/bot.db-shm
-data/bot.db-wal
+data/bot.db-waldata/*.db-*
+data/chroma_db/
+data/*.db
+data/*.db-journal
+# db
+# docs
+docs/
+.DS_Store
+.env
+env/
+ENV/
+# Environment
+.env.nas
+# IDE
+.idea/
+*.log
+# Logs
+logs/*.log
+# Model cache (sentence-transformers)
+# OS
+__pycache__/
+*.py[cod]
+# Python
+.Python
+*.so
+*.swo
+*.swp
+*.temp
+# Temporary files
+Thumbs.db
+*.tmp
+venv/
+.vscode/

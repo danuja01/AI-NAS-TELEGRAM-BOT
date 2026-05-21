@@ -514,19 +514,24 @@ async def _process_file_upload(update: Update, file_obj, filename: str, subfolde
     user_id = update.effective_user.id
     
     try:
-        # Determine target folder
-        if subfolder:
-            target_dir = os.path.join('/app/documents', subfolder)
-        else:
-            target_dir = '/app/documents'
-        
-        # Create directory if needed
+        from utils.root_session import RootSessionManager
+        from utils.security import resolve_upload_path
+
+        base = config.DOCUMENT_PATH or "/app/documents"
+        allowed = RootSessionManager.get_allowed_paths_for_user(user_id)
+        target_path_obj, err = resolve_upload_path(
+            base, subfolder, filename, allowed_roots=allowed
+        )
+        if err or not target_path_obj:
+            await update.message.reply_text(format_error(err or "Invalid upload path"))
+            return
+
+        target_dir = str(target_path_obj.parent)
+        target_path = str(target_path_obj)
         os.makedirs(target_dir, exist_ok=True)
-        
-        # Get file from Telegram
+
         file = await file_obj.get_file()
-        target_path = os.path.join(target_dir, filename)
-        
+
         # Check if file already exists
         if os.path.exists(target_path):
             await update.message.reply_text(

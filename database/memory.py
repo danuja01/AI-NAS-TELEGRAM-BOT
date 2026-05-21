@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional
 
 import config
 from database.models import get_db
+from utils.security import redact_command_for_storage
 
 logger = logging.getLogger(__name__)
 

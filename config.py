@@ -52,8 +52,11 @@ ALLOWED_PATHS = [
 DISK_ROOT_PATH = '/srv/dev-disk-by-uuid-9ac22f70-05c6-442f-993b-0d9ca1ae5988'
 VISIBLE_ROOT_FOLDERS = ['documents', 'loo', 'media', 'photos', 'tutorials']
 
-# Root Access Password
+# Root Access Password (bcrypt hash recommended: python scripts/hash_root_password.py 'secret')
 ROOT_PASSWORD = os.getenv("ROOT_PASSWORD", "")
+ROOT_LOGIN_MAX_ATTEMPTS = int(os.getenv("ROOT_LOGIN_MAX_ATTEMPTS", "5"))
+ROOT_LOGIN_LOCKOUT_MINUTES = int(os.getenv("ROOT_LOGIN_LOCKOUT_MINUTES", "15"))
+ROOT_LOGIN_RATE_PER_MINUTE = int(os.getenv("ROOT_LOGIN_RATE_PER_MINUTE", "3"))
 
 # Conversation Settings
 CONVERSATION_HISTORY_LENGTH = int(os.getenv("CONVERSATION_HISTORY_LENGTH", "10"))
@@ -123,7 +126,7 @@ HEALTH_CHECK_INTERVAL = 5
 
 # Host command execution (OMV / apt on host from container)
 # Use "nsenter" with docker pid: host + privileged, or "ssh" with HOST_SSH=user@nas
-HOST_EXEC_MODE = os.getenv("HOST_EXEC_MODE", "none").strip().lower()
+HOST_EXEC_MODE = os.getenv("HOST_EXEC_MODE", "nsenter").strip().lower()
 HOST_NSENTER_PID = int(os.getenv("HOST_NSENTER_PID", "1"))
 HOST_SSH = os.getenv("HOST_SSH", "").strip()
 HOST_SSH_EXTRA_ARGS = [
@@ -207,9 +210,7 @@ def validate_config():
         errors.append("OPENAI_API_KEY is required")
     
     if not ALLOWED_USER_IDS:
-        errors.append(
-            "ALLOWED_USER_IDS is required (comma-separated Telegram user IDs)"
-        )
+        print("⚠️  WARNING: No ALLOWED_USER_IDS set. Bot will be accessible to anyone!")
     
     if errors:
         raise ValueError(f"Configuration errors: {', '.join(errors)}")

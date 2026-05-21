@@ -63,6 +63,14 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.NAS_SSH_PRIVATE_KEY }}
 
+      - name: Install SSH known_hosts
+        if: secrets.NAS_SSH_KNOWN_HOSTS != ''
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.NAS_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
       - name: Deploy on NAS
         env:
           NAS_HOST: ${{ secrets.NAS_HOST }}
