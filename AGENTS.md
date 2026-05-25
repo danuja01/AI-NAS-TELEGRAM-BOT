@@ -47,6 +47,14 @@ No automated test suite exists in the repository. Verification is done by:
 1. Importing all modules: `python -c "import config; from commands import basic, monitoring, docker_cmds, filesystem, ai_cmds, service, root_cmds, operations"`
 2. Running the bot with valid Telegram/OpenAI credentials
 
+### Memory (RAM)
+
+Default Docker/compose settings target **~300–600 MB** steady RSS (monitoring-only) instead of **~1.2 GB**:
+
+- **`EMBEDDING_PROVIDER=openai`** (default): RAG uses OpenAI embeddings API — no PyTorch/sentence-transformers in the image.
+- **`AUTO_INDEX_ON_START=false`** (default in compose): avoids loading embeddings + full corpus on every container boot.
+- **`EMBEDDING_PROVIDER=local`**: install `requirements-local-embeddings.txt` and run `/index` with `AUTO_INDEX_FORCE_REINDEX=true` after switching providers.
+
 ### Key gotchas
 
 - `chromadb==0.4.22` requires `chroma-hnswlib` which needs `python3.12-dev` (for `Python.h`) and C++ build tools (`g++`) to compile. These are pre-installed in the VM.

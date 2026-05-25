@@ -155,7 +155,7 @@ async def check_system_health(bot: Bot):
         all_alerts.extend(check_temperature_alerts(temps))
 
         try:
-            containers = list_containers(all_containers=True)
+            containers = list_containers(all_containers=True, include_stats=False)
             all_alerts.extend(check_docker_alerts(containers))
         except Exception:
             pass

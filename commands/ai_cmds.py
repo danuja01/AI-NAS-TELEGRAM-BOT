@@ -212,6 +212,8 @@ async def execute_summarize(
 
 
 async def execute_explain(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, term: str):
+    from ai.rag_engine import ask, is_rag_ready
+
     status_msg = None
     try:
         if not is_rag_ready():

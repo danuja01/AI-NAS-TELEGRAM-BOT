@@ -46,9 +46,16 @@ services:
       - METRICS_SAMPLE_INTERVAL_MINUTES=${METRICS_SAMPLE_INTERVAL_MINUTES:-15}
       - DIGEST_INTERVAL_HOURS=${DIGEST_INTERVAL_HOURS:-24}
       - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-5}
-      # Re-index RAG docs after each container start + notify ALLOWED_USER_IDS on Telegram
-      - AUTO_INDEX_ON_START=${AUTO_INDEX_ON_START:-true}
+      # RAG: OpenAI embeddings avoid loading PyTorch (~500MB+ RSS). Re-index after changing provider.
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-openai}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-16}
+      - RAG_INCLUDE_COMMAND_CATALOG=${RAG_INCLUDE_COMMAND_CATALOG:-false}
+      # Re-index RAG docs after each container start (false saves RAM/CPU on boot)
+      - AUTO_INDEX_ON_START=${AUTO_INDEX_ON_START:-false}
       - AUTO_INDEX_FORCE_REINDEX=${AUTO_INDEX_FORCE_REINDEX:-false}
+      # Reduce glibc heap fragmentation in long-running Python
+      - MALLOC_ARENA_MAX=2
       - STORAGE_CMD_TIMEOUT=${STORAGE_CMD_TIMEOUT:-120}
       - STORAGE_SCAN_TIMEOUT=${STORAGE_SCAN_TIMEOUT:-300}
       - STORAGE_LOW_DISK_PERCENT=${STORAGE_LOW_DISK_PERCENT:-90}

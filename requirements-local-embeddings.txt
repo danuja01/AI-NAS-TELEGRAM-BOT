@@ -1,0 +1,4 @@
+# Optional: local sentence-transformers embeddings (pulls PyTorch; ~500MB–1GB+ RSS).
+# Use only when EMBEDDING_PROVIDER=local
+-r requirements.txt
+sentence-transformers==2.3.1
