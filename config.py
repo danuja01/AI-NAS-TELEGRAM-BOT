@@ -123,6 +123,8 @@ def ignore_temperature_sensor_for_alerts(sensor_key: str) -> bool:
 
 # Health Check Interval (minutes)
 HEALTH_CHECK_INTERVAL = int(os.getenv("HEALTH_CHECK_INTERVAL", "5"))
+# Max entries in in-memory alert deduplication cache
+ALERT_DEDUP_CACHE_MAX = max(100, int(os.getenv("ALERT_DEDUP_CACHE_MAX", "500")))
 
 # Autonomous troubleshooting (AI advisory reports on health alerts; no auto-remediation)
 _AUTOTROUBLESHOOT_SEVERITIES = frozenset({"info", "warning", "critical"})

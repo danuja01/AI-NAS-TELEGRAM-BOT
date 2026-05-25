@@ -155,6 +155,28 @@ def load_document(path: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def iter_document_paths(directory: str, recursive: bool = True):
+    """
+    Yield paths to supported documents without loading file contents.
+    Keeps peak RAM low during RAG indexing.
+    """
+    dir_path = Path(directory)
+
+    if not dir_path.exists() or not dir_path.is_dir():
+        logger.error(f"Invalid directory: {directory}")
+        return
+
+    extensions = [".pdf", ".docx", ".doc", ".txt", ".md", ".markdown"]
+    if recursive:
+        for ext in extensions:
+            for file_path in dir_path.rglob(f"*{ext}"):
+                yield file_path
+    else:
+        for ext in extensions:
+            for file_path in dir_path.glob(f"*{ext}"):
+                yield file_path
+
+
 def load_directory(directory: str, recursive: bool = True) -> List[Dict[str, Any]]:
     """
     Load all supported documents from a directory.

@@ -6,8 +6,6 @@ from telegram.constants import ParseMode
 from telegram.ext import Application
 
 import config
-from ai.embeddings import is_embeddings_available
-from ai.rag_engine import index_documents
 from utils.formatters import escape_telegram_html
 
 logger = logging.getLogger(__name__)
@@ -19,6 +17,9 @@ async def run_auto_index_on_startup(application: Application) -> None:
     if not config.ALLOWED_USER_IDS:
         logger.warning("AUTO_INDEX_ON_START is set but ALLOWED_USER_IDS is empty; skipping auto-index")
         return
+
+    from ai.embeddings import is_embeddings_available
+    from ai.rag_engine import index_documents
 
     bot = application.bot
     force = config.AUTO_INDEX_FORCE_REINDEX

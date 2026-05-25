@@ -119,7 +119,7 @@ async def _gather_evidence(alerts: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     if alert_types & {"docker"}:
         try:
-            evidence["docker_containers"] = list_containers(all_containers=True)
+            evidence["docker_containers"] = list_containers(all_containers=True, include_stats=False)
         except Exception as e:
             evidence["docker_error"] = str(e)
 
