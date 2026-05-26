@@ -207,6 +207,29 @@ STORAGE_LOW_DISK_PERCENT = int(os.getenv("STORAGE_LOW_DISK_PERCENT", "90"))
 STORAGE_WEEKLY_SCAN_ENABLED = _env_bool("STORAGE_WEEKLY_SCAN_ENABLED", False)
 DOCKER_CLEAN_DRY_RUN_DEFAULT = _env_bool("DOCKER_CLEAN_DRY_RUN_DEFAULT", False)
 
+# Docker health alerts: avoid noise from containers you stopped on purpose
+MONITOR_DOCKER_IGNORE = frozenset(
+    n.strip().lstrip("/").lower()
+    for n in os.getenv("MONITOR_DOCKER_IGNORE", "").split(",")
+    if n.strip()
+)
+_docker_alert_mode = os.getenv("MONITOR_DOCKER_ALERT_MODE", "unexpected_exit").strip().lower()
+MONITOR_DOCKER_ALERT_MODE = (
+    _docker_alert_mode
+    if _docker_alert_mode in ("unexpected_exit", "all_exited")
+    else "unexpected_exit"
+)
+# Skip exited containers with restart policy no / unless-stopped / successful one-shot (on-failure + exit 0)
+MONITOR_DOCKER_SKIP_INTENTIONAL_STOP = _env_bool("MONITOR_DOCKER_SKIP_INTENTIONAL_STOP", True)
+
+
+def docker_container_ignored_for_alerts(name: str) -> bool:
+    """True if this container name is in MONITOR_DOCKER_IGNORE (exact, case-insensitive)."""
+    if not name or not MONITOR_DOCKER_IGNORE:
+        return False
+    return name.lstrip("/").lower() in MONITOR_DOCKER_IGNORE
+
+
 _default_scan_paths = "/var/lib/docker,/var/log"
 if DOCUMENT_PATH:
     _default_scan_paths += f",{DOCUMENT_PATH}"

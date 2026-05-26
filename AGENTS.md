@@ -22,6 +22,8 @@ Read-only **OpenMediaVault** storage views use host `omv-rpc` when host exec is 
 
 With `AGENT_HOST_READONLY_TOOL=true`, the AI may call **`nas_host_readonly_profile`**: a fixed enum of host commands (SSH/nsenter), not arbitrary shell.
 
+**Docker exited alerts** default to `MONITOR_DOCKER_ALERT_MODE=unexpected_exit` (no spam for containers you already stopped). Add names to `MONITOR_DOCKER_IGNORE` if needed.
+
 **Autonomous troubleshooting** (`AUTOTROUBLESHOOT_ENABLED=true`): after threshold health alerts are delivered, the bot gathers read-only evidence (metrics, disks, Docker, SMART, optional journal tails) and sends a Telegram **advisory** AI report (hypotheses, verification steps, possible actions with risks). It does not reboot, prune, upgrade, or restart anything automatically. Uses OpenAI API credits; default off.
 
 Recent `/chat`, `/analyze`, and `/ask` runs include **recent bot messages** in context: slash-command output (e.g. `/smart`) and **automated health/digest alerts** are saved to the conversation DB so follow-up questions like “is this alarming?” can refer to them.

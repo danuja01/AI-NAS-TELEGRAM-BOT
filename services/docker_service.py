@@ -59,12 +59,17 @@ def list_containers(
                 if include_stats and container.status == "running":
                     stats = container.stats(stream=False)
 
+                state = container.attrs.get("State") or {}
+                host_cfg = container.attrs.get("HostConfig") or {}
+                restart = host_cfg.get("RestartPolicy") or {}
                 info = {
                     "id": container.short_id,
                     "name": container.name,
                     "image": container.image.tags[0] if container.image.tags else "unknown",
                     "status": container.status,
-                    "state": container.attrs["State"],
+                    "state": state,
+                    "restart_policy": (restart.get("Name") or "no").lower(),
+                    "exit_code": state.get("ExitCode"),
                 }
 
                 if stats:
