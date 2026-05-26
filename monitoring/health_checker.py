@@ -55,6 +55,7 @@ _scheduler = None
 _last_alert_times: Dict[str, datetime] = {}
 _last_systemd_active: Dict[str, bool] = {}
 _last_journal_sent: Dict[str, float] = {}
+_last_container_running: Dict[str, bool] = {}
 
 
 async def send_digest(bot: Bot):
@@ -155,8 +156,12 @@ async def check_system_health(bot: Bot):
         all_alerts.extend(check_temperature_alerts(temps))
 
         try:
+            global _last_container_running
             containers = list_containers(all_containers=True, include_stats=False)
-            all_alerts.extend(check_docker_alerts(containers))
+            docker_alerts, _last_container_running = check_docker_alerts(
+                containers, _last_container_running
+            )
+            all_alerts.extend(docker_alerts)
         except Exception:
             pass
 
