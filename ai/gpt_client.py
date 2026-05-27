@@ -152,14 +152,20 @@ async def generate_with_tools_loop(
                 " **nas_host_readonly_profile** calls allow-listed read-only host diagnostics via SSH/nsenter "
                 "(fixed argv — not arbitrary shell). "
             )
+        _cs_addon = ""
+        if config.CROWDSEC_MONITOR_ENABLED and config.CROWDSEC_SECURITY_ASSISTANT_IN_CHAT:
+            from ai.security_assistant import crowdsec_security_chat_addon
+
+            _cs_addon = " " + crowdsec_security_chat_addon()
         system_prompt = with_nas_scope(
             "You are a concise technical assistant for a NAS Telegram bot. "
             "You have tools for THIS host: temperatures, health score, **nas_cpu_stats** (per-core/thread CPU like `/cpu`), disks, network, SMART, "
             "per-device SMART detail, OpenMediaVault disk/filesystem/SMART RPC when the host exposes omv-rpc, systemd, "
             "storage paths, Docker reads, and **nas_request_docker_restart** / **nas_request_docker_stop** "
             "which post the same Telegram Confirm/Cancel buttons as /drestart and /dstop (nothing happens until the user confirms)."
-            + _ro_tools +
-            " For other destructive host actions, still point users to slash commands. "
+            + _ro_tools
+            + _cs_addon
+            + " For other destructive host actions, still point users to slash commands. "
             "For **unused or dangling Docker images** and reclaimable image space, tell users to run `/dimages` "
             "(inventory) or `/dscan` (deep scan) — `/docker` is only the compact dashboard, not an image audit. "
             "Never use markdown pipe tables; use short bullet lists. "

@@ -237,6 +237,21 @@ UPTIME_ESCALATION_THRESHOLDS = tuple(
 METRICS_SAMPLE_INTERVAL_MINUTES = int(os.getenv("METRICS_SAMPLE_INTERVAL_MINUTES", "15"))
 DIGEST_INTERVAL_HOURS = int(os.getenv("DIGEST_INTERVAL_HOURS", "24"))
 
+# CrowdSec security assistant (read-only cscli via docker exec + optional LAPI)
+CROWDSEC_MONITOR_ENABLED = _env_bool("CROWDSEC_MONITOR_ENABLED", False)
+CROWDSEC_SECURITY_ASSISTANT_IN_CHAT = _env_bool("CROWDSEC_SECURITY_ASSISTANT_IN_CHAT", True)
+CROWDSEC_CONTAINER = os.getenv("CROWDSEC_CONTAINER", "crowdsec").strip().lstrip("/")
+CROWDSEC_API_URL = os.getenv("CROWDSEC_API_URL", "http://127.0.0.1:8082").strip()
+CROWDSEC_POLL_MINUTES = max(2, int(os.getenv("CROWDSEC_POLL_MINUTES", "5")))
+_crowdsec_min = os.getenv("CROWDSEC_ALERT_MIN_SEVERITY", "MEDIUM").strip().upper()
+CROWDSEC_ALERT_MIN_SEVERITY = (
+    _crowdsec_min if _crowdsec_min in ("LOW", "MEDIUM", "HIGH") else "MEDIUM"
+)
+CROWDSEC_ALERT_COOLDOWN_MINUTES = max(5, int(os.getenv("CROWDSEC_ALERT_COOLDOWN_MINUTES", "60")))
+CROWDSEC_SPIKE_THRESHOLD = max(3, int(os.getenv("CROWDSEC_SPIKE_THRESHOLD", "8")))
+CROWDSEC_SPIKE_WINDOW_MINUTES = max(5, int(os.getenv("CROWDSEC_SPIKE_WINDOW_MINUTES", "15")))
+CROWDSEC_DAILY_REPORT_HOUR = min(23, max(0, int(os.getenv("CROWDSEC_DAILY_REPORT_HOUR", "8"))))
+
 # Docker / storage management (/d* commands)
 STORAGE_CMD_TIMEOUT = int(os.getenv("STORAGE_CMD_TIMEOUT", "120"))
 STORAGE_SCAN_TIMEOUT = int(os.getenv("STORAGE_SCAN_TIMEOUT", "300"))

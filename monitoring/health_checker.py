@@ -396,6 +396,30 @@ async def start_health_monitoring(bot: Bot):
             args=[bot],
             id="autotroubleshoot_unack_scan",
         )
+    if config.CROWDSEC_MONITOR_ENABLED:
+        from monitoring.crowdsec_monitor import poll_crowdsec_alerts, send_crowdsec_daily_report
+
+        poll_m = max(2, config.CROWDSEC_POLL_MINUTES)
+        _scheduler.add_job(
+            poll_crowdsec_alerts,
+            "interval",
+            minutes=poll_m,
+            args=[bot],
+            id="crowdsec_poll",
+        )
+        _scheduler.add_job(
+            send_crowdsec_daily_report,
+            "cron",
+            hour=config.CROWDSEC_DAILY_REPORT_HOUR,
+            minute=0,
+            args=[bot],
+            id="crowdsec_daily_report",
+        )
+        logger.info(
+            "CrowdSec monitor: poll every %sm, daily report at %02d:00",
+            poll_m,
+            config.CROWDSEC_DAILY_REPORT_HOUR,
+        )
     _scheduler.start()
 
     try:

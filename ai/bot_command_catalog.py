@@ -24,6 +24,8 @@ Destructive actions use Telegram confirmations; tell users to run the command th
 - `/monitor_add <name> <type> <target>` — Add monitor (http, https, tcp, ping, dns, ssl, docker, systemd, push)
 - `/monitor_report` — Weekly uptime and incident summary
 - `/alerts` — Unacknowledged alerts; `/alert_ack <id>` to dismiss
+- `/crowdsec` — CrowdSec alerts, bans, and decisions (requires CROWDSEC_MONITOR_ENABLED)
+- `/security` — AI NAS Security Assistant summary from CrowdSec evidence
 - `/uptime` — System uptime
 - `/health` — Health score and issues list
 - `/smart` or `/drives` — SMART drive summary (smartctl) plus OMV SMART device overview when available
