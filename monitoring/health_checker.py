@@ -26,6 +26,7 @@ from monitoring.alerts import (
     check_cpu_alerts,
     check_disk_alerts,
     check_docker_alerts,
+    check_docker_unhealthy_alerts,
     check_memory_alerts,
     check_smart_alerts,
     check_smart_delta_alerts,
@@ -56,6 +57,7 @@ _last_alert_times: Dict[str, datetime] = {}
 _last_systemd_active: Dict[str, bool] = {}
 _last_journal_sent: Dict[str, float] = {}
 _last_container_running: Dict[str, bool] = {}
+_last_container_unhealthy: Dict[str, bool] = {}
 
 
 async def send_digest(bot: Bot):
@@ -156,12 +158,16 @@ async def check_system_health(bot: Bot):
         all_alerts.extend(check_temperature_alerts(temps))
 
         try:
-            global _last_container_running
+            global _last_container_running, _last_container_unhealthy
             containers = list_containers(all_containers=True, include_stats=False)
             docker_alerts, _last_container_running = check_docker_alerts(
                 containers, _last_container_running
             )
             all_alerts.extend(docker_alerts)
+            unhealthy_alerts, _last_container_unhealthy = check_docker_unhealthy_alerts(
+                containers, _last_container_unhealthy
+            )
+            all_alerts.extend(unhealthy_alerts)
         except Exception:
             pass
 
@@ -259,6 +265,13 @@ async def send_alerts(bot: Bot, alerts: List[Dict[str, Any]]) -> List[Dict[str, 
         last_time = _last_alert_times.get(alert_key)
         if last_time and (current_time - last_time) < timedelta(hours=1):
             continue
+
+        # Bound in-memory dedup cache
+        if len(_last_alert_times) > config.ALERT_DEDUP_CACHE_MAX:
+            cutoff = current_time - timedelta(hours=2)
+            stale = [k for k, t in _last_alert_times.items() if t < cutoff]
+            for k in stale[: len(_last_alert_times) // 2]:
+                _last_alert_times.pop(k, None)
 
         await save_alert(alert["type"], alert["severity"], alert["message"])
 
@@ -362,6 +375,18 @@ async def start_health_monitoring(bot: Bot):
             args=[bot],
             id="weekly_storage_scan",
         )
+    if config.UPTIME_WEEKLY_REPORT_ENABLED:
+        from monitoring.uptime.analytics import send_weekly_report
+
+        _scheduler.add_job(
+            send_weekly_report,
+            "cron",
+            day_of_week=config.UPTIME_WEEKLY_REPORT_DAY[:3],
+            hour=8,
+            minute=0,
+            args=[bot],
+            id="uptime_weekly_report",
+        )
     if config.AUTOTROUBLESHOOT_ENABLED and config.AUTOTROUBLESHOOT_SCAN_UNACK:
         scan_h = max(1, config.AUTOTROUBLESHOOT_UNACK_SCAN_HOURS)
         _scheduler.add_job(
@@ -387,6 +412,14 @@ async def start_health_monitoring(bot: Bot):
     except Exception as e:
         logger.error("cron_notify_server start: %s", e)
 
+    if config.UPTIME_MONITORING_ENABLED:
+        try:
+            from monitoring.uptime.engine import start_uptime_monitoring
+
+            await start_uptime_monitoring(bot)
+        except Exception as e:
+            logger.error("Failed to start uptime monitoring: %s", e, exc_info=True)
+
     await record_metrics_sample()
     await check_system_health(bot)
 
@@ -395,7 +428,9 @@ def stop_health_monitoring():
     """Stop scheduler and cron hook."""
     global _scheduler
     from monitoring.cron_notify_server import stop_cron_notify_server
+    from monitoring.uptime.engine import stop_uptime_monitoring
 
+    stop_uptime_monitoring()
     stop_cron_notify_server()
     if _scheduler:
         _scheduler.shutdown()

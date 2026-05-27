@@ -190,6 +190,50 @@ def check_docker_alerts(
     return alerts, new_running
 
 
+def check_docker_unhealthy_alerts(
+    containers: List[Dict[str, Any]],
+    previous_unhealthy: Optional[Dict[str, bool]] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, bool]]:
+    """
+    Alert on Docker HEALTHCHECK unhealthy or restarting containers.
+    Only notifies on transition into unhealthy state (not every tick).
+    """
+    alerts: List[Dict[str, Any]] = []
+    new_state: Dict[str, bool] = {}
+    prev = previous_unhealthy if previous_unhealthy is not None else {}
+
+    for container in containers:
+        name = container.get("name", "Unknown")
+        key = _normalize_container_name(name)
+        status = (container.get("status") or "").lower()
+        state = container.get("state") or {}
+        health = (state.get("Health") or {}).get("Status", "").lower()
+
+        is_bad = status == "restarting" or health == "unhealthy"
+        new_state[key] = is_bad
+
+        if not is_bad:
+            continue
+        if config.docker_container_ignored_for_alerts(name):
+            continue
+        if prev.get(key) is True:
+            continue
+
+        detail = f"status={status}"
+        if health == "unhealthy":
+            detail = "Docker healthcheck: unhealthy"
+        elif status == "restarting":
+            detail = "container restarting"
+        alerts.append({
+            "type": "docker",
+            "severity": "critical" if health == "unhealthy" else "warning",
+            "message": f"Container '{name}' unhealthy: {detail}",
+            "container_name": name.lstrip("/"),
+        })
+
+    return alerts, new_state
+
+
 def check_smart_alerts(drives: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Check SMART drive health alerts (thresholds; sector deltas are separate)."""
     alerts = []

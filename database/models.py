@@ -111,7 +111,6 @@ CREATE TABLE IF NOT EXISTS storage_snapshots (
 CREATE INDEX IF NOT EXISTS idx_storage_snapshots_recorded ON storage_snapshots(recorded_at);
 """
 
-
 async def init_database():
     """Initialize the database with schema."""
     try:
@@ -122,7 +121,9 @@ async def init_database():
             config.DATABASE_PATH,
             check_same_thread=False
         )
-        await db.executescript(DATABASE_SCHEMA)
+        from monitoring.uptime.schema import UPTIME_SCHEMA
+
+        await db.executescript(DATABASE_SCHEMA + UPTIME_SCHEMA)
         await db.commit()
         await db.close()
         

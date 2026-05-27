@@ -32,6 +32,12 @@ HELP_SECTION_BODIES: dict[str, str] = {
         "<code>/smart</code> — Drive health (SMART summary)\n"
         "<code>/drives</code> — Same summary as /smart\n"
         "<code>/hdddetail</code> — HDD detail: spin counters, hdparm state, sample history\n"
+        "<code>/monitors</code> — Uptime Kuma-style monitor list (auto + manual)\n"
+        "<code>/monitor_add</code> — Add HTTP/HTTPS/TCP/ping/DNS/SSL/docker monitor\n"
+        "<code>/monitor_discover</code> — Auto-create monitors for running containers\n"
+        "<code>/monitor_report</code> — Weekly uptime & incident summary\n"
+        "<code>/alerts</code> — Unacknowledged alerts · <code>/alert_ack &lt;id&gt;</code>\n"
+        "<i>Background alerts: CPU/RAM/disk/SMART/Docker/systemd + custom monitors.</i>\n"
     ),
     "dock": (
         "<b>Docker · storage</b>\n\n"
