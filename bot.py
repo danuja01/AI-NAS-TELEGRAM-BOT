@@ -71,6 +71,8 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("monitor_add", "Add HTTP/TCP/ping monitor"),
     BotCommand("alerts", "Unacknowledged alerts"),
     BotCommand("monitor_report", "Weekly uptime report"),
+    BotCommand("monitor_stats", "MTBF/MTTR and latency graph"),
+    BotCommand("monitor_groups", "List monitor groups"),
     BotCommand("docker", "Docker dashboard"),
     BotCommand("containers", "Container list (compact)"),
     BotCommand("dscan", "Docker storage scan"),
@@ -207,6 +209,12 @@ def main():
     application.add_handler(CommandHandler("monitor_report", monitor_cmds.monitor_report_command))
     application.add_handler(CommandHandler("alerts", monitor_cmds.alerts_command))
     application.add_handler(CommandHandler("alert_ack", monitor_cmds.alert_ack_command))
+    application.add_handler(CommandHandler("monitor_stats", monitor_cmds.monitor_stats_command))
+    application.add_handler(CommandHandler("monitor_group_create", monitor_cmds.monitor_group_create_command))
+    application.add_handler(CommandHandler("monitor_group_add", monitor_cmds.monitor_group_add_command))
+    application.add_handler(CommandHandler("monitor_groups", monitor_cmds.monitor_groups_command))
+    application.add_handler(CommandHandler("monitor_tag", monitor_cmds.monitor_tag_command))
+    application.add_handler(CommandHandler("monitor_images", monitor_cmds.monitor_images_command))
     application.add_handler(
         CallbackQueryHandler(
             monitor_cmds.handle_monitor_callbacks,

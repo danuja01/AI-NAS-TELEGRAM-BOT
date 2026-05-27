@@ -55,6 +55,32 @@ async def ensure_builtin_monitors() -> None:
             except Exception:
                 pass
 
+    if config.UPTIME_BUILTIN_TAILSCALE and config.NETWORK_TAILSCALE_CLI:
+        if not await store.get_monitor_by_name("tailscale-mesh"):
+            try:
+                await store.create_monitor(
+                    "tailscale-mesh",
+                    "tailscale",
+                    "online",
+                    interval_seconds=120,
+                    tags=["builtin", "network", "tailscale"],
+                )
+            except Exception:
+                pass
+
+    if config.UPTIME_BUILTIN_CLOUDFLARED:
+        if not await store.get_monitor_by_name("cloudflare-tunnel"):
+            try:
+                await store.create_monitor(
+                    "cloudflare-tunnel",
+                    "cloudflared",
+                    config.UPTIME_CLOUDFLARED_TARGET,
+                    interval_seconds=120,
+                    tags=["builtin", "network", "cloudflare"],
+                )
+            except Exception:
+                pass
+
 
 async def sync_docker_monitors() -> None:
     """Auto-create docker-type monitors for running containers."""

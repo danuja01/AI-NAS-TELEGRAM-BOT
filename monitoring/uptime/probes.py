@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 import aiohttp
 
+import config
 from utils.network_tools import run_ping, validate_ping_target
 
 logger = logging.getLogger(__name__)
@@ -37,9 +38,11 @@ async def run_probe(monitor: Dict[str, Any]) -> ProbeResult:
         "ssl": _probe_ssl,
         "keyword": _probe_keyword,
         "docker": _probe_docker,
-        "process": _probe_systemd,
+        "process": _probe_process,
         "systemd": _probe_systemd,
         "push": _probe_push,
+        "tailscale": _probe_tailscale,
+        "cloudflared": _probe_cloudflared,
     }
     fn = runners.get(mtype)
     if not fn:
@@ -226,6 +229,92 @@ async def _probe_docker(monitor: Dict, timeout: int) -> ProbeResult:
         return ProbeResult(True, latency)
     except Exception as e:
         return ProbeResult(False, error_message=str(e)[:500])
+
+
+async def _probe_process(monitor: Dict, timeout: int) -> ProbeResult:
+    from monitoring.uptime.process_probe import process_matches
+
+    t0 = asyncio.get_event_loop().time()
+    try:
+        ok, detail = await asyncio.wait_for(
+            asyncio.to_thread(process_matches, monitor["target"]),
+            timeout=timeout,
+        )
+        latency = (asyncio.get_event_loop().time() - t0) * 1000
+        if ok:
+            return ProbeResult(True, latency, error_message=detail[:200])
+        return ProbeResult(False, latency, error_message=detail[:500])
+    except Exception as e:
+        return ProbeResult(False, error_message=str(e)[:500])
+
+
+async def _probe_tailscale(monitor: Dict, timeout: int) -> ProbeResult:
+    """Target optional: ignored. Checks tailscale CLI online state."""
+    import json
+    import subprocess
+
+    if not config.NETWORK_TAILSCALE_CLI:
+        return ProbeResult(False, error_message="NETWORK_TAILSCALE_CLI=false")
+    t0 = asyncio.get_event_loop().time()
+    try:
+        proc = await asyncio.wait_for(
+            asyncio.to_thread(
+                subprocess.run,
+                ["tailscale", "status", "--json"],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            ),
+            timeout=timeout + 2,
+        )
+        latency = (asyncio.get_event_loop().time() - t0) * 1000
+        if proc.returncode != 0:
+            return ProbeResult(
+                False,
+                latency,
+                error_message=(proc.stderr or "tailscale status failed")[:500],
+            )
+        data = json.loads(proc.stdout or "{}")
+        self_node = data.get("Self") or {}
+        online = self_node.get("Online")
+        if online is True:
+            ips = self_node.get("TailscaleIPs") or []
+            return ProbeResult(
+                True,
+                latency,
+                error_message=f"online {ips[0] if ips else ''}"[:200],
+            )
+        backend = (self_node.get("BackendState") or "unknown").lower()
+        return ProbeResult(False, latency, error_message=f"Tailscale offline ({backend})")
+    except FileNotFoundError:
+        return ProbeResult(False, error_message="tailscale CLI not in PATH")
+    except Exception as e:
+        return ProbeResult(False, error_message=str(e)[:500])
+
+
+async def _probe_cloudflared(monitor: Dict, timeout: int) -> ProbeResult:
+    """
+    Target modes:
+      (empty) — process name cloudflared running
+      systemd — systemctl is-active cloudflared on host
+      tcp:127.0.0.1:7844 — metrics port open
+    """
+    target = (monitor.get("target") or "").strip().lower()
+    if target in ("", "process", "proc"):
+        mon = dict(monitor)
+        mon["target"] = "cloudflared"
+        return await _probe_process(mon, timeout)
+    if target == "systemd":
+        mon = dict(monitor)
+        mon["target"] = "cloudflared"
+        mon["type"] = "systemd"
+        return await _probe_systemd(mon, timeout)
+    if target.startswith("tcp:"):
+        mon = dict(monitor)
+        mon["target"] = target[4:]
+        mon["type"] = "tcp"
+        return await _probe_tcp(mon, timeout)
+    return await _probe_process(monitor, timeout)
 
 
 async def _probe_systemd(monitor: Dict, timeout: int) -> ProbeResult:

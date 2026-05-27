@@ -13,12 +13,16 @@ import config
 from monitoring.uptime import dependencies, notify, probes, store
 from monitoring.uptime.builtin import ensure_builtin_monitors, sync_docker_monitors
 from monitoring.uptime.diagnostics import diagnose_monitor_failure
+from monitoring.uptime import escalation
+from monitoring.uptime.reboot_watch import check_reboot_and_alert
+from monitoring.uptime.docker_images import scan_image_updates
 
 logger = logging.getLogger(__name__)
 
 _engine_task: Optional[asyncio.Task] = None
 _bot: Optional[Bot] = None
 _previous_status: Dict[int, str] = {}
+_tick_count: int = 0
 
 
 async def start_uptime_monitoring(bot: Bot) -> None:
@@ -70,7 +74,19 @@ async def _engine_loop() -> None:
 
 
 async def run_monitor_tick(bot: Bot) -> None:
+    global _tick_count
+    _tick_count += 1
     dependencies.clear_suppression_cache()
+    try:
+        await check_reboot_and_alert(bot)
+    except Exception as e:
+        logger.debug("reboot watch: %s", e)
+    image_iv = max(1, config.UPTIME_DOCKER_IMAGE_SCAN_TICKS)
+    if _tick_count % image_iv == 0:
+        try:
+            await scan_image_updates(bot)
+        except Exception as e:
+            logger.debug("image scan: %s", e)
     due = await store.get_due_monitors()
     for monitor in due:
         await _check_one(bot, monitor)
@@ -108,28 +124,41 @@ async def _check_one(bot: Bot, monitor: Dict) -> None:
         await store.open_incident(mid, root_cause="suppressed: parent down")
         return
 
+    fresh = await store.get_monitor(mid) or monitor
+    if not escalation.should_notify_down(fresh, prev):
+        return
+
+    affected: list = []
     if prev != "down":
-        affected: list = []
         child_ids = await store.get_children_of(mid)
         if child_ids:
-            affected = await dependencies.on_parent_down(mid, monitor.get("name", ""))
-
+            affected = await dependencies.on_parent_down(mid, fresh.get("name", ""))
         await store.open_incident(mid, root_cause=result.error_message)
-        ai_summary = await diagnose_monitor_failure(monitor, result.error_message)
+
+    ai_summary = ""
+    if prev != "down" and config.UPTIME_AI_ON_INCIDENT:
+        ai_summary = await diagnose_monitor_failure(fresh, result.error_message)
         if ai_summary:
             await store.update_incident_ai_summary(mid, ai_summary)
 
-        await notify.send_monitor_down(
-            bot,
-            monitor,
-            result.error_message,
-            datetime.utcnow(),
-            ai_summary=ai_summary,
-            affected_children=affected or None,
-        )
+    sev, stage = escalation.escalation_level(fresh)
+    fail_n = int(fresh.get("consecutive_failures") or 0)
+    err_msg = result.error_message
+    if stage > 0:
+        err_msg = f"[escalation stage {stage + 1}] {err_msg} ({fail_n} failures)"
 
-        if config.UPTIME_SELF_HEAL_ENABLED and monitor.get("type") == "docker":
-            await _maybe_self_heal(monitor)
+    await notify.send_monitor_down(
+        bot,
+        fresh,
+        err_msg,
+        datetime.utcnow(),
+        ai_summary=ai_summary if prev != "down" else "",
+        affected_children=affected or None,
+        severity=sev,
+    )
+
+    if config.UPTIME_SELF_HEAL_ENABLED and fresh.get("type") == "docker":
+        await _maybe_self_heal(fresh)
 
 
 async def _maybe_self_heal(monitor: Dict) -> None:

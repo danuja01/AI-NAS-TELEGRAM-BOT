@@ -65,6 +65,7 @@ async def send_monitor_down(
     incident_started: datetime,
     ai_summary: str = "",
     affected_children: Optional[List[str]] = None,
+    severity: str = "critical",
 ) -> None:
     if not config.ALLOWED_USER_IDS:
         return
@@ -90,7 +91,11 @@ async def send_monitor_down(
     if ai_summary:
         text += f"\n🤖 <b>AI Analysis</b>\n{escape_telegram_html(ai_summary[:3500])}"
 
-    await save_alert("uptime", "critical", msg_plain[:2000])
+    icons = {"info": "ℹ️", "warning": "⚠️", "critical": "🔴"}
+    icon = icons.get(severity, "🔴")
+    text = text.replace("🚨", icon, 1)
+
+    await save_alert("uptime", severity, msg_plain[:2000])
 
     for uid in config.ALLOWED_USER_IDS:
         kb = _alert_keyboard(monitor, uid)

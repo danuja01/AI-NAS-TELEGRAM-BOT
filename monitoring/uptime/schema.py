@@ -87,4 +87,35 @@ CREATE TABLE IF NOT EXISTS uptime_push_tokens (
     last_seen DATETIME,
     FOREIGN KEY (monitor_id) REFERENCES uptime_monitors(id) ON DELETE CASCADE
 );
+
+-- Monitor groups (logical bundles for reports and escalation)
+CREATE TABLE IF NOT EXISTS uptime_monitor_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS uptime_monitor_group_members (
+    group_id INTEGER NOT NULL,
+    monitor_id INTEGER NOT NULL,
+    UNIQUE(group_id, monitor_id),
+    FOREIGN KEY (group_id) REFERENCES uptime_monitor_groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (monitor_id) REFERENCES uptime_monitors(id) ON DELETE CASCADE
+);
+
+-- Host state (NAS reboot detection)
+CREATE TABLE IF NOT EXISTS uptime_host_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Docker image digests for update detection
+CREATE TABLE IF NOT EXISTS docker_image_snapshots (
+    container_name TEXT PRIMARY KEY,
+    image_id TEXT NOT NULL,
+    image_tag TEXT,
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 """

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 MONITOR_TYPES = frozenset({
     "http", "https", "tcp", "ping", "docker", "process", "dns",
-    "keyword", "ssl", "push", "systemd",
+    "keyword", "ssl", "push", "systemd", "tailscale", "cloudflared",
 })
 
 
@@ -487,6 +487,70 @@ async def list_recent_incidents(limit: int = 20) -> List[Dict[str, Any]]:
             (limit,),
         )
         return [dict(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+
+
+async def get_recent_latencies(monitor_id: int, limit: int = 24) -> List[float]:
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            """
+            SELECT latency_ms FROM uptime_heartbeats
+            WHERE monitor_id = ? AND latency_ms IS NOT NULL
+            ORDER BY checked_at DESC LIMIT ?
+            """,
+            (monitor_id, limit),
+        )
+        rows = await cur.fetchall()
+        return [float(r[0]) for r in reversed(rows)]
+    finally:
+        await db.close()
+
+
+async def compute_mtbf_mttr(monitor_id: int, hours: int = 168) -> Dict[str, Any]:
+    """MTBF ≈ period / incidents; MTTR = mean closed incident duration."""
+    db = await get_db()
+    try:
+        db.row_factory = __import__("aiosqlite").Row
+        period_sec = hours * 3600
+        cur = await db.execute(
+            """
+            SELECT
+                COUNT(*) AS incident_count,
+                AVG(duration_seconds) AS mttr_avg,
+                MAX(duration_seconds) AS longest_outage,
+                SUM(duration_seconds) AS total_downtime
+            FROM uptime_incidents
+            WHERE monitor_id = ?
+              AND started_at >= datetime('now', ?)
+              AND ended_at IS NOT NULL
+            """,
+            (monitor_id, f"-{hours} hours"),
+        )
+        row = dict(await cur.fetchone() or {})
+        count = int(row.get("incident_count") or 0)
+        mttr = row.get("mttr_avg")
+        total_down = float(row.get("total_downtime") or 0)
+        mtbf = None
+        if count > 0:
+            mtbf = (period_sec - total_down) / count
+        cur2 = await db.execute(
+            """
+            SELECT COUNT(*) FROM uptime_incidents
+            WHERE monitor_id = ? AND started_at >= datetime('now', ?)
+            """,
+            (monitor_id, f"-{hours} hours"),
+        )
+        all_inc = (await cur2.fetchone())[0]
+        return {
+            "incident_count": all_inc,
+            "closed_incidents": count,
+            "mttr_seconds": round(mttr, 1) if mttr else None,
+            "mtbf_seconds": round(mtbf, 1) if mtbf else None,
+            "longest_outage_seconds": row.get("longest_outage"),
+            "total_downtime_seconds": total_down,
+        }
     finally:
         await db.close()
 

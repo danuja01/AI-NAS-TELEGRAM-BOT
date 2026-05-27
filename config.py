@@ -211,6 +211,22 @@ UPTIME_BUILTIN_HTTP_URL = os.getenv("UPTIME_BUILTIN_HTTP_URL", "https://1.1.1.1"
 UPTIME_SELF_HEAL_ENABLED = _env_bool("UPTIME_SELF_HEAL_ENABLED", False)
 UPTIME_SELF_HEAL_MAX_RESTARTS = max(1, int(os.getenv("UPTIME_SELF_HEAL_MAX_RESTARTS", "2")))
 UPTIME_SELF_HEAL_COOLDOWN_MINUTES = max(5, int(os.getenv("UPTIME_SELF_HEAL_COOLDOWN_MINUTES", "30")))
+# NAS reboot detection (psutil boot_time)
+UPTIME_REBOOT_ALERT_ENABLED = _env_bool("UPTIME_REBOOT_ALERT_ENABLED", True)
+# Built-in Tailscale / Cloudflare tunnel monitors
+UPTIME_BUILTIN_TAILSCALE = _env_bool("UPTIME_BUILTIN_TAILSCALE", True)
+UPTIME_BUILTIN_CLOUDFLARED = _env_bool("UPTIME_BUILTIN_CLOUDFLARED", True)
+# cloudflared target: empty=process, systemd, or tcp:127.0.0.1:7844
+UPTIME_CLOUDFLARED_TARGET = os.getenv("UPTIME_CLOUDFLARED_TARGET", "process").strip()
+# Docker image change alerts
+UPTIME_DOCKER_IMAGE_ALERTS = _env_bool("UPTIME_DOCKER_IMAGE_ALERTS", True)
+# Run image scan every N uptime engine ticks (30s tick → 120 ≈ 1h)
+UPTIME_DOCKER_IMAGE_SCAN_TICKS = max(10, int(os.getenv("UPTIME_DOCKER_IMAGE_SCAN_TICKS", "120")))
+# Escalation: send/re-escalate at these consecutive failure counts
+_esc = os.getenv("UPTIME_ESCALATION_THRESHOLDS", "1,3,10")
+UPTIME_ESCALATION_THRESHOLDS = tuple(
+    sorted({max(1, int(x.strip())) for x in _esc.split(",") if x.strip().isdigit()}) or [1, 3, 10]
+)
 
 # Metrics samples + digest
 METRICS_SAMPLE_INTERVAL_MINUTES = int(os.getenv("METRICS_SAMPLE_INTERVAL_MINUTES", "15"))

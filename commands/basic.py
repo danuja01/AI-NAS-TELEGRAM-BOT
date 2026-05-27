@@ -36,6 +36,9 @@ HELP_SECTION_BODIES: dict[str, str] = {
         "<code>/monitor_add</code> — Add HTTP/HTTPS/TCP/ping/DNS/SSL/docker monitor\n"
         "<code>/monitor_discover</code> — Auto-create monitors for running containers\n"
         "<code>/monitor_report</code> — Weekly uptime & incident summary\n"
+        "<code>/monitor_stats</code> — MTBF/MTTR + latency sparkline for one monitor\n"
+        "<code>/monitor_groups</code> — Monitor groups · <code>/monitor_tag</code> tags\n"
+        "<code>/monitor_images</code> — Scan Docker image updates\n"
         "<code>/alerts</code> — Unacknowledged alerts · <code>/alert_ack &lt;id&gt;</code>\n"
         "<i>Background alerts: CPU/RAM/disk/SMART/Docker/systemd + custom monitors.</i>\n"
     ),
