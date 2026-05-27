@@ -180,8 +180,10 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     data = query.data
     user_id = update.effective_user.id
 
-    # Uptime monitor buttons (handled by monitor_cmds; ignore here)
-    if data and data.split(":", 1)[0] in ("uack", "usil", "ulog", "urst"):
+    # Uptime monitor buttons (group -1 handler)
+    from monitoring.uptime.callbacks import is_uptime_callback
+
+    if is_uptime_callback(data):
         return
 
     if data == "cancel":

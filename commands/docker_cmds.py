@@ -173,6 +173,10 @@ async def send_restart_confirmation(
     update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, container_name: str
 ):
     try:
+        em = update.effective_message
+        if em is None:
+            logger.warning("send_restart_confirmation: no effective_message")
+            return
         keyboard = [
             [
                 InlineKeyboardButton("✅ Confirm", callback_data=callback_data_for_user("dr", user_id, container_name)),
@@ -180,20 +184,25 @@ async def send_restart_confirmation(
             ]
         ]
         context.user_data["pending_restart"] = container_name
-        await update.message.reply_text(
+        await em.reply_text(
             f"⚠️ Restart container `{container_name}`?\n\nThis will briefly interrupt the service.",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
         )
     except Exception as e:
         logger.error("send_restart_confirmation: %s", e, exc_info=True)
-        await update.message.reply_text(format_error(f"Failed to prepare restart: {e}"))
+        em = update.effective_message
+        if em:
+            await em.reply_text(format_error(f"Failed to prepare restart: {e}"))
 
 
 async def send_stop_confirmation(
     update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, container_name: str
 ):
     try:
+        em = update.effective_message
+        if em is None:
+            return
         keyboard = [
             [
                 InlineKeyboardButton("✅ Confirm", callback_data=callback_data_for_user("ds", user_id, container_name)),
@@ -201,14 +210,16 @@ async def send_stop_confirmation(
             ]
         ]
         context.user_data["pending_stop"] = container_name
-        await update.message.reply_text(
+        await em.reply_text(
             f"⚠️ Stop container `{container_name}`?",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
         )
     except Exception as e:
         logger.error("send_stop_confirmation: %s", e, exc_info=True)
-        await update.message.reply_text(format_error(f"Failed to prepare stop: {e}"))
+        em = update.effective_message
+        if em:
+            await em.reply_text(format_error(f"Failed to prepare stop: {e}"))
 
 
 async def run_dstart(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, container_name: str):

@@ -351,67 +351,7 @@ async def monitor_images_command(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def handle_monitor_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle uptime alert inline buttons."""
-    query = update.callback_query
-    if not query or not query.data:
-        return
-    if await reject_unauthorized_callback(query):
-        return
-    await query.answer()
-    data = query.data
-    user_id = update.effective_user.id
-    action = data.split(":", 1)[0] if data else ""
+    """Handle uptime alert inline buttons (delegates to monitoring.uptime.callbacks)."""
+    from monitoring.uptime.callbacks import handle_uptime_callback
 
-    if action == "uack":
-        uid, payload = parse_callback_user_id(data, "uack")
-        if uid != user_id:
-            await query.answer("Not your button.", show_alert=True)
-            return
-        try:
-            await query.edit_message_reply_markup(reply_markup=None)
-        except Exception:
-            pass
-        await query.message.reply_text("✅ Monitor alert noted.")
-    elif action == "usil":
-        uid, payload = parse_callback_user_id(data, "usil")
-        if uid != user_id:
-            await query.answer("Not your button.", show_alert=True)
-            return
-        mid_s, _, mins_s = (payload or "").partition(":")
-        try:
-            mins = int(mins_s or "60")
-            mid = int(mid_s)
-        except ValueError:
-            await query.message.reply_text("❌ Invalid silence callback.")
-            return
-        await store.add_silence(mins, monitor_id=mid, reason="telegram")
-        try:
-            await query.edit_message_reply_markup(reply_markup=None)
-        except Exception:
-            pass
-        await query.message.reply_text(
-            f"🔕 Silenced monitor #{mid} for {mins} minutes."
-        )
-    elif action == "ulog":
-        uid, payload = parse_callback_user_id(data, "ulog")
-        if uid != user_id:
-            return
-        from services.docker_service import get_container_logs
-        from utils.telegram_reply import reply_text_chunked
-
-        try:
-            logs = await __import__("asyncio").to_thread(get_container_logs, payload, 40)
-            await reply_text_chunked(
-                query.message,
-                f"📋 Logs `{payload}`:\n<pre>{escape_telegram_html(logs[:3500])}</pre>",
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception as e:
-            await query.message.reply_text(f"❌ Logs failed: {e}")
-    elif action == "urst":
-        uid, payload = parse_callback_user_id(data, "urst")
-        if uid != user_id:
-            return
-        from commands.docker_cmds import send_restart_confirmation
-
-        await send_restart_confirmation(update, context, user_id, payload)
+    await handle_uptime_callback(update, context)
