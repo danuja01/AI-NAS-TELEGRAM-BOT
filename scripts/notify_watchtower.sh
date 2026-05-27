@@ -41,28 +41,40 @@ _curl_docker() {
     -d "$(_json_body)"
 }
 
+_host_hook_up() {
+  curl -fsS --connect-timeout 2 "http://${HOST}:${PORT}/health" >/dev/null 2>&1
+}
+
+_container_running() {
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER"
+}
+
 _check_hook() {
   if [[ "$MODE" == "docker" ]]; then
     _curl_docker
     return
   fi
-  if _curl_host 2>/dev/null; then
+  if [[ "$MODE" == "host" ]]; then
+    if ! _host_hook_up; then
+      echo "curl: host http://${HOST}:${PORT}/health unreachable (CRON_NOTIFY_MODE=host)" >&2
+      echo "Run: docker compose up -d --force-recreate  (publishes 127.0.0.1:${PORT})" >&2
+      exit 7
+    fi
+    _curl_host
     return
   fi
-  if [[ "$MODE" == "host" ]]; then
-    echo "curl: could not connect to http://${HOST}:${PORT} (CRON_NOTIFY_MODE=host)" >&2
-    echo "Ensure CRON_NOTIFY_SECRET is set, the bot is running, and port ${PORT} is published on the host." >&2
-    exit 7
+  # auto: host port if published, else docker exec (typical NAS: bot in container, no host bind)
+  if _host_hook_up; then
+    _curl_host
+    return
   fi
-  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER"; then
-    echo "Note: host cannot reach :${PORT}; using docker exec ${CONTAINER} ..." >&2
+  if _container_running; then
+    echo "Note: using docker exec ${CONTAINER} (host :${PORT} not published yet)" >&2
     _curl_docker
     return
   fi
-  echo "curl: could not connect to http://${HOST}:${PORT}/watchtower" >&2
-  echo "Fix: add CRON_NOTIFY_SECRET to .env, restart the bot, and either:" >&2
-  echo "  1) Recreate container with published port (see docker-compose ports), or" >&2
-  echo "  2) export CRON_NOTIFY_MODE=docker" >&2
+  echo "curl: could not reach http://${HOST}:${PORT}/watchtower" >&2
+  echo "Fix: set CRON_NOTIFY_SECRET in .env, restart bot, or run with CRON_NOTIFY_MODE=docker" >&2
   exit 7
 }
 

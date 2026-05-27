@@ -197,7 +197,7 @@ The HTTP hook runs **inside** the bot container, not on the NAS host by default.
 
 | Symptom | Fix |
 |--------|-----|
-| `curl: (7) Failed to connect` from host script | Set `CRON_NOTIFY_SECRET`, restart bot, **recreate** container so `docker-compose` publishes `127.0.0.1:18765`, **or** run `./scripts/notify_watchtower.sh` (auto-falls back to `docker exec`) |
+| `curl: (7) Failed to connect` from host script | Pull latest `scripts/notify_watchtower.sh` (auto uses `docker exec`). For host port: `docker compose up -d --force-recreate` (not just `restart`) |
 | Hook never starts | `CRON_NOTIFY_SECRET` missing or empty in container env |
 | Watchtower in Docker, bot in Docker | Use `generic+http://host.docker.internal:18765/watchtower?secret=...` (with published host port) |
 | Test without publishing port | `CRON_NOTIFY_MODE=docker ./scripts/notify_watchtower.sh "test"` |
