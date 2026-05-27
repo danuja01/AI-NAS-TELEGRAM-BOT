@@ -40,7 +40,9 @@ HELP_SECTION_BODIES: dict[str, str] = {
         "<code>/monitor_groups</code> — Monitor groups · <code>/monitor_tag</code> tags\n"
         "<code>/monitor_images</code> — Scan Docker image updates\n"
         "<code>/alerts</code> — Unacknowledged alerts · <code>/alert_ack all</code> or <code>/alert_ack &lt;id&gt;</code>\n"
-        "<i>Background alerts: CPU/RAM/disk/SMART/Docker/systemd + custom monitors.</i>\n"
+        "<code>/crowdsec</code> — CrowdSec alerts, bans, and decisions (when enabled)\n"
+        "<code>/security</code> — AI NAS Security Assistant summary (CrowdSec)\n"
+        "<i>Background alerts: CPU/RAM/disk/SMART/Docker/systemd + CrowdSec + custom monitors.</i>\n"
     ),
     "dock": (
         "<b>Docker · storage</b>\n\n"

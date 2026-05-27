@@ -28,7 +28,18 @@ from monitoring.health_checker import start_health_monitoring
 from utils.startup_auto_index import run_auto_index_on_startup
 
 # Import command handlers
-from commands import basic, monitoring, docker_cmds, docker_storage_cmds, filesystem, ai_cmds, service, operations, monitor_cmds
+from commands import (
+    basic,
+    monitoring,
+    docker_cmds,
+    docker_storage_cmds,
+    filesystem,
+    ai_cmds,
+    service,
+    operations,
+    monitor_cmds,
+    security_cmds,
+)
 from commands import text_followup
 
 # Setup logging
@@ -70,6 +81,8 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("monitors", "List uptime monitors"),
     BotCommand("monitor_add", "Add HTTP/TCP/ping monitor"),
     BotCommand("alerts", "Unacknowledged alerts"),
+    BotCommand("crowdsec", "CrowdSec bans & alerts"),
+    BotCommand("security", "AI security incident summary"),
     BotCommand("monitor_report", "Weekly uptime report"),
     BotCommand("monitor_stats", "MTBF/MTTR and latency graph"),
     BotCommand("monitor_groups", "List monitor groups"),
@@ -220,6 +233,8 @@ def main():
     application.add_handler(CommandHandler("monitor_report", monitor_cmds.monitor_report_command))
     application.add_handler(CommandHandler("alerts", monitor_cmds.alerts_command))
     application.add_handler(CommandHandler("alert_ack", monitor_cmds.alert_ack_command))
+    application.add_handler(CommandHandler("crowdsec", security_cmds.crowdsec_command))
+    application.add_handler(CommandHandler("security", security_cmds.security_command))
     application.add_handler(CommandHandler("monitor_stats", monitor_cmds.monitor_stats_command))
     application.add_handler(CommandHandler("monitor_group_create", monitor_cmds.monitor_group_create_command))
     application.add_handler(CommandHandler("monitor_group_add", monitor_cmds.monitor_group_add_command))

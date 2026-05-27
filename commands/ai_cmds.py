@@ -134,6 +134,11 @@ async def execute_chat(
                 "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** runs allow-listed read-only "
                 "host diagnostics over SSH/nsenter (fixed argv, not arbitrary shell). "
             )
+        _cs_chat = ""
+        if config.CROWDSEC_MONITOR_ENABLED and config.CROWDSEC_SECURITY_ASSISTANT_IN_CHAT:
+            from ai.security_assistant import crowdsec_security_chat_addon
+
+            _cs_chat = crowdsec_security_chat_addon() + " "
         response = await generate_with_tools_loop(
             prompt=message,
             context=full_ctx,
@@ -145,6 +150,7 @@ async def execute_chat(
                 "and **nas_request_docker_restart** / **nas_request_docker_stop** which post the same inline "
                 "Confirm/Cancel UI as /drestart and /dstop (nothing happens until the user taps Confirm). "
                 + _ro_chat
+                + _cs_chat
                 + "The `## Recent conversation` block may include the bot's earlier replies (slash commands like /smart "
                 "or automated health alerts). Treat that text as what the user is replying to. "
                 + "For **unused Docker images** or reclaimable image space, point users to `/dimages` or `/dscan`, not `/docker` (dashboard only). "

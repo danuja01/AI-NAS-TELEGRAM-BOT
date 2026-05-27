@@ -301,15 +301,29 @@ _NAS_AGENT_TOOLS_BASE: List[Dict[str, Any]] = [
         {"container": {"type": "string", "description": "Exact Docker container name"}},
         required=["container"],
     ),
+    _tool_entry(
+        "nas_crowdsec_status",
+        (
+            "Read-only CrowdSec snapshot from this NAS: recent alerts, active ban decisions, "
+            "and metrics via `docker exec` cscli (container name from CROWDSEC_CONTAINER). "
+            "Use for security incidents, brute force, bans, attack trends, or whether SSH/services were targeted. "
+            "Requires CROWDSEC_MONITOR_ENABLED=true."
+        ),
+    ),
 ]
 
 
 def get_nas_agent_tools(for_rag: bool = False) -> List[Dict[str, Any]]:
     """Tools for Chat Completions, including optional read-only host access when configured."""
-    out = list(_NAS_AGENT_TOOLS_BASE)
-    if not config.AGENT_HOST_READONLY_TOOL:
-        return out
-    out.append(_NAS_HOST_READONLY_PROFILE_TOOL_ENTRY)
+    out = []
+    for entry in _NAS_AGENT_TOOLS_BASE:
+        fn = entry.get("function") or {}
+        name = fn.get("name", "")
+        if name == "nas_crowdsec_status" and not config.CROWDSEC_MONITOR_ENABLED:
+            continue
+        out.append(entry)
+    if config.AGENT_HOST_READONLY_TOOL:
+        out.append(_NAS_HOST_READONLY_PROFILE_TOOL_ENTRY)
     return out
 
 
@@ -807,6 +821,24 @@ def _system_snapshot() -> str:
         return json.dumps({"ok": False, "error": str(e)})
 
 
+def _crowdsec_status() -> str:
+    if not config.CROWDSEC_MONITOR_ENABLED:
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "CrowdSec tool disabled (set CROWDSEC_MONITOR_ENABLED=true)",
+            }
+        )
+    try:
+        from services.crowdsec_client import gather_crowdsec_snapshot
+
+        snap = gather_crowdsec_snapshot()
+        return json.dumps(snap, default=str)[:14000]
+    except Exception as e:
+        logger.exception("nas_crowdsec_status")
+        return json.dumps({"ok": False, "error": str(e)})
+
+
 def run_nas_tool(function_name: str, arguments: Dict[str, Any] | None) -> str:
     """
     Execute one tool by name. Returns a short JSON string for the model (never raises).
@@ -846,6 +878,8 @@ def run_nas_tool(function_name: str, arguments: Dict[str, Any] | None) -> str:
             return _docker_unhealthy()
         if function_name == "nas_system_health_snapshot":
             return _system_snapshot()
+        if function_name == "nas_crowdsec_status":
+            return _crowdsec_status()
         if function_name in ("nas_request_docker_restart", "nas_request_docker_stop"):
             return json.dumps(
                 {
