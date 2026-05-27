@@ -189,6 +189,21 @@ CRON_NOTIFY_SECRET=long-random-string-at-least-24-chars
 CRON_NOTIFY_PORT=18765
 ```
 
+Restart the bot after setting the secret. In logs you should see: `Cron notify HTTP listening on 127.0.0.1:18765`.
+
+### Troubleshooting “Could not connect to 127.0.0.1:18765”
+
+The HTTP hook runs **inside** the bot container, not on the NAS host by default.
+
+| Symptom | Fix |
+|--------|-----|
+| `curl: (7) Failed to connect` from host script | Set `CRON_NOTIFY_SECRET`, restart bot, **recreate** container so `docker-compose` publishes `127.0.0.1:18765`, **or** run `./scripts/notify_watchtower.sh` (auto-falls back to `docker exec`) |
+| Hook never starts | `CRON_NOTIFY_SECRET` missing or empty in container env |
+| Watchtower in Docker, bot in Docker | Use `generic+http://host.docker.internal:18765/watchtower?secret=...` (with published host port) |
+| Test without publishing port | `CRON_NOTIFY_MODE=docker ./scripts/notify_watchtower.sh "test"` |
+
+Health check (inside container): `docker exec nas-telegram-bot curl -fsS http://127.0.0.1:18765/health`
+
 ---
 
 ## 6b. Watchtower (container image updates)
@@ -214,12 +229,14 @@ services:
 
 Shoutrrr sends JSON with `title` and `message`; the bot formats it as a **Watchtower** Telegram alert.
 
-If the bot runs in Docker and Watchtower on the host, use `host.docker.internal` instead of `127.0.0.1`.
+- **Bot + Watchtower on host:** `127.0.0.1:18765` (bot must run on host, not only in Docker).
+- **Bot in Docker (this repo’s compose):** publish `127.0.0.1:18765` on the host (default in `docker-compose.yml`), then use `127.0.0.1` from the host or `host.docker.internal` from another container.
+- **Watchtower in Docker, no published port:** `docker exec nas-telegram-bot curl ...` or set `CRON_NOTIFY_MODE=docker` for the test script.
 
 ### Option B — POST from a script
 
 ```bash
-export CRON_NOTIFY_SECRET=your_secret
+# Loads CRON_NOTIFY_SECRET from repo .env if present
 ./scripts/notify_watchtower.sh "New update available for jellyfin"
 ```
 

@@ -75,6 +75,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Secrets: inject via `environment` / env_file — do not bind-mount .env into the container
 
+    # Cron/Watchtower HTTP hook (loopback on host only; requires CRON_NOTIFY_SECRET)
+    ports:
+      - "127.0.0.1:${CRON_NOTIFY_PORT:-18765}:${CRON_NOTIFY_PORT:-18765}"
+
     # Optional: Network configuration
     # networks:
     #   - nas-network
