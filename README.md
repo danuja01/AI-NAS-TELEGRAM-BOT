@@ -73,13 +73,14 @@ For OpenMediaVault / Debian **host** actions from the bot, the container should 
 0 3 * * * /path/to/BOT/scripts/notify_telegram.sh "nightly-backup" "ok" "Finished rsync"
 ```
 
-**Option B — HTTP hook (requires `CRON_NOTIFY_SECRET`):** from the host:
+**Option B — HTTP hook (requires `CRON_NOTIFY_SECRET`):** `docker-compose` publishes `127.0.0.1:18765` on the host when the secret is set. From the host:
 
 ```bash
-docker exec nas-telegram-bot curl -sS -X POST http://127.0.0.1:18765/notify \
-  -H 'Content-Type: application/json' \
-  -d '{"secret":"YOUR_SECRET","job":"backup","status":"ok","message":"done"}'
+./scripts/notify_watchtower.sh "New update available for jellyfin"
 ```
+
+Or without a published port: `CRON_NOTIFY_MODE=docker ./scripts/notify_watchtower.sh "..."`  
+Or: `docker exec nas-telegram-bot curl -sS -X POST http://127.0.0.1:18765/notify ...`
 
 ---
 

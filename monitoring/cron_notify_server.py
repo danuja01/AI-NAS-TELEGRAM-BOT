@@ -160,12 +160,18 @@ def start_cron_notify_server(loop: asyncio.AbstractEventLoop, send_html: Callabl
         return
 
     bind = (config.CRON_NOTIFY_BIND or "127.0.0.1").strip()
-    if bind not in ("127.0.0.1", "::1", "localhost"):
+    loopback = ("127.0.0.1", "::1", "localhost")
+    if bind not in loopback and bind != "0.0.0.0":
         logger.error(
-            "CRON_NOTIFY_BIND must be loopback (127.0.0.1); got %s — refusing to start",
+            "CRON_NOTIFY_BIND must be 127.0.0.1 or 0.0.0.0 (docker port publish); got %s",
             bind,
         )
         return
+    if bind == "0.0.0.0":
+        logger.info(
+            "cron_notify on 0.0.0.0:%s — publish host port as 127.0.0.1 only (see docker-compose)",
+            config.CRON_NOTIFY_PORT,
+        )
 
     if len(config.CRON_NOTIFY_SECRET) < 24:
         logger.warning("CRON_NOTIFY_SECRET is short; use at least 24 random bytes")
