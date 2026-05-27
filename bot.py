@@ -173,7 +173,7 @@ def main():
     application.add_handler(
         CallbackQueryHandler(
             handle_uptime_callback,
-            pattern=r"^(uack|usil|ulog|urst):",
+            pattern=r"^(uackall|uack|usil|ulog|urst):",
         ),
         group=-1,
     )

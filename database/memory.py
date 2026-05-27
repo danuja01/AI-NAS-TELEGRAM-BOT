@@ -378,6 +378,28 @@ async def acknowledge_alert(alert_id: int):
             await db.close()
 
 
+async def acknowledge_all_alerts() -> int:
+    """Mark every unacknowledged alert as acknowledged. Returns rows updated."""
+    db = None
+    try:
+        db = await get_db()
+        cur = await db.execute(
+            """
+            UPDATE alerts
+            SET acknowledged = TRUE, acknowledged_at = CURRENT_TIMESTAMP
+            WHERE acknowledged = FALSE
+            """
+        )
+        await db.commit()
+        return int(cur.rowcount or 0)
+    except Exception as e:
+        logger.error("Failed to acknowledge all alerts: %s", e)
+        return 0
+    finally:
+        if db:
+            await db.close()
+
+
 async def get_smart_snapshots_dict() -> Dict[str, Dict[str, int]]:
     """Return {device: {reallocated, pending}} from DB."""
     try:

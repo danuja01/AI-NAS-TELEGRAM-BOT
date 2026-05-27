@@ -191,6 +191,50 @@ CRON_NOTIFY_PORT=18765
 
 ---
 
+## 6b. Watchtower (container image updates)
+
+Watchtower can notify the bot when a new image is available (e.g. *New update available for Jellyfin*).
+
+### Option A — Shoutrrr / generic HTTP (recommended)
+
+In your Watchtower `docker-compose.yml`:
+
+```yaml
+services:
+  watchtower:
+    image: containrrr/watchtower
+    environment:
+      WATCHTOWER_NOTIFICATIONS: shoutrrr
+      # Same secret as CRON_NOTIFY_SECRET in the bot .env
+      WATCHTOWER_NOTIFICATION_URL: >-
+        generic+http://127.0.0.1:18765/watchtower?secret=YOUR_CRON_NOTIFY_SECRET
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
+Shoutrrr sends JSON with `title` and `message`; the bot formats it as a **Watchtower** Telegram alert.
+
+If the bot runs in Docker and Watchtower on the host, use `host.docker.internal` instead of `127.0.0.1`.
+
+### Option B — POST from a script
+
+```bash
+export CRON_NOTIFY_SECRET=your_secret
+./scripts/notify_watchtower.sh "New update available for jellyfin"
+```
+
+### Option C — JSON to `/notify`
+
+```bash
+curl -fsS -X POST http://127.0.0.1:18765/notify \
+  -H "Content-Type: application/json" \
+  -d '{"secret":"YOUR_SECRET","source":"watchtower","message":"New update available for jellyfin"}'
+```
+
+**Note:** The bot’s built-in `UPTIME_DOCKER_IMAGE_ALERTS` also detects image ID changes on its own; Watchtower tells you *before* you pull/recreate.
+
+---
+
 ## 7. Docker image update alerts
 
 When a container’s image ID changes (pull/recreate), you get a Telegram message.
