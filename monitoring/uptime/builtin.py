@@ -55,16 +55,28 @@ async def ensure_builtin_monitors() -> None:
             except Exception:
                 pass
 
-    if config.UPTIME_BUILTIN_TAILSCALE and config.NETWORK_TAILSCALE_CLI:
-        if not await store.get_monitor_by_name("tailscale-mesh"):
+    if config.UPTIME_BUILTIN_TAILSCALE:
+        from monitoring.uptime.tailscale_probe import default_tailscale_target
+
+        ts_target = default_tailscale_target()
+        existing_ts = await store.get_monitor_by_name("tailscale-mesh")
+        if existing_ts:
+            if config.UPTIME_TAILSCALE_SYNC_TARGET and existing_ts.get("target") != ts_target:
+                try:
+                    await store.update_monitor(existing_ts["id"], target=ts_target)
+                    logger.info("Updated tailscale-mesh target → %s", ts_target)
+                except Exception as e:
+                    logger.debug("tailscale target sync: %s", e)
+        else:
             try:
                 await store.create_monitor(
                     "tailscale-mesh",
                     "tailscale",
-                    "online",
+                    ts_target,
                     interval_seconds=120,
                     tags=["builtin", "network", "tailscale"],
                 )
+                logger.info("Created tailscale-mesh (target=%s)", ts_target)
             except Exception:
                 pass
 

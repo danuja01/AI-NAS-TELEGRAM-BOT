@@ -355,7 +355,7 @@ async def handle_monitor_callbacks(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     if not query or not query.data:
         return
-    if reject_unauthorized_callback(update):
+    if await reject_unauthorized_callback(query):
         return
     await query.answer()
     data = query.data
@@ -365,17 +365,33 @@ async def handle_monitor_callbacks(update: Update, context: ContextTypes.DEFAULT
     if action == "uack":
         uid, payload = parse_callback_user_id(data, "uack")
         if uid != user_id:
+            await query.answer("Not your button.", show_alert=True)
             return
-        await query.edit_message_reply_markup(reply_markup=None)
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
         await query.message.reply_text("✅ Monitor alert noted.")
     elif action == "usil":
         uid, payload = parse_callback_user_id(data, "usil")
         if uid != user_id:
+            await query.answer("Not your button.", show_alert=True)
             return
         mid_s, _, mins_s = (payload or "").partition(":")
-        mins = int(mins_s or "60")
-        await store.add_silence(mins, monitor_id=int(mid_s), reason="telegram")
-        await query.message.reply_text(f"🔕 Silenced {mins} minutes.")
+        try:
+            mins = int(mins_s or "60")
+            mid = int(mid_s)
+        except ValueError:
+            await query.message.reply_text("❌ Invalid silence callback.")
+            return
+        await store.add_silence(mins, monitor_id=mid, reason="telegram")
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await query.message.reply_text(
+            f"🔕 Silenced monitor #{mid} for {mins} minutes."
+        )
     elif action == "ulog":
         uid, payload = parse_callback_user_id(data, "ulog")
         if uid != user_id:
