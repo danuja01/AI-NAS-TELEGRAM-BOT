@@ -52,12 +52,6 @@ ALLOWED_PATHS = [
 DISK_ROOT_PATH = '/srv/dev-disk-by-uuid-9ac22f70-05c6-442f-993b-0d9ca1ae5988'
 VISIBLE_ROOT_FOLDERS = ['documents', 'loo', 'media', 'photos', 'tutorials']
 
-# Root Access Password (bcrypt hash recommended: python scripts/hash_root_password.py 'secret')
-ROOT_PASSWORD = os.getenv("ROOT_PASSWORD", "")
-ROOT_LOGIN_MAX_ATTEMPTS = int(os.getenv("ROOT_LOGIN_MAX_ATTEMPTS", "5"))
-ROOT_LOGIN_LOCKOUT_MINUTES = int(os.getenv("ROOT_LOGIN_LOCKOUT_MINUTES", "15"))
-ROOT_LOGIN_RATE_PER_MINUTE = int(os.getenv("ROOT_LOGIN_RATE_PER_MINUTE", "3"))
-
 # Conversation Settings
 CONVERSATION_HISTORY_LENGTH = int(os.getenv("CONVERSATION_HISTORY_LENGTH", "10"))
 # Max assistant↔tool round-trips for /chat, /analyze, and RAG /ask agent mode

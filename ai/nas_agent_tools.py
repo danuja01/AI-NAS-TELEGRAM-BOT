@@ -84,7 +84,7 @@ _NAS_HOST_READONLY_PROFILE_TOOL_ENTRY = _tool_entry(
         "bounded tail -f (timeout), loopback ping, grep -F on scan paths with fixed keywords only, etc.). "
         "Paths for file/dir probes must be under STORAGE_SCAN_PATHS. "
         "Units default to MONITOR_SYSTEMD_UNITS; set HOST_READONLY_SYSTEMD_ANY_UNIT=true to allow other valid unit names. "
-        "Requires AGENT_HOST_READONLY_TOOL=true at boot. Does **not** replace `/ssh` (root-session shell)."
+        "Requires AGENT_HOST_READONLY_TOOL=true at boot (fixed read-only host profiles only)."
     ),
     {
         "profile": {

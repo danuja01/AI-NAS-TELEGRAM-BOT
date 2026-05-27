@@ -150,7 +150,7 @@ async def generate_with_tools_loop(
         if config.AGENT_HOST_READONLY_TOOL:
             _ro_tools = (
                 " **nas_host_readonly_profile** calls allow-listed read-only host diagnostics via SSH/nsenter "
-                "(fixed argv — not arbitrary shell); it does **not** replace **`/ssh`**. "
+                "(fixed argv — not arbitrary shell). "
             )
         system_prompt = with_nas_scope(
             "You are a concise technical assistant for a NAS Telegram bot. "

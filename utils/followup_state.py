@@ -19,15 +19,12 @@ AI_PENDING_TS = "pending_ai_ts"
 CMD_PENDING_KEY = "pending_cmd_followup"
 CMD_PENDING_TS = "pending_cmd_followup_ts"
 
-FOLLOWUP_ROOTLOGIN = "rootlogin"
-FOLLOWUP_SSH = "ssh"
 FOLLOWUP_DOCKER_RESTART = "docker_restart"
 FOLLOWUP_DOCKER_STOP = "docker_stop"
 FOLLOWUP_DOCKER_DSTART = "docker_dstart"
 FOLLOWUP_DOCKER_LOGS = "docker_logs"
 FOLLOWUP_RESTART_SERVICE = "restart_service"
 FOLLOWUP_FIND = "find"
-FOLLOWUP_DOWNLOAD = "download"
 
 
 def clear_ai_pending(context: ContextTypes.DEFAULT_TYPE) -> None:

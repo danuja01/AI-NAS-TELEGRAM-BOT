@@ -46,7 +46,7 @@ flake8 --max-line-length=120 --select=E9,F63,F7,F82 --exclude=venv,data,logs,doc
 ### Testing
 
 No automated test suite exists in the repository. Verification is done by:
-1. Importing all modules: `python -c "import config; from commands import basic, monitoring, docker_cmds, filesystem, ai_cmds, service, root_cmds, operations"`
+1. Importing all modules: `python -c "import config; from commands import basic, monitoring, docker_cmds, filesystem, ai_cmds, service, operations"`
 2. Running the bot with valid Telegram/OpenAI credentials
 
 ### Memory (RAM)

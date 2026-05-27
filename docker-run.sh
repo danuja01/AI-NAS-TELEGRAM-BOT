@@ -14,7 +14,7 @@ echo -e "${GREEN}🐳 NAS Telegram AI Assistant — Docker Compose${NC}\n"
 
 if [ ! -f .env ]; then
     echo -e "${RED}❌ Error: .env file not found!${NC}"
-    echo "Copy .env.example and set TELEGRAM_TOKEN, OPENAI_API_KEY, ALLOWED_USER_IDS, ROOT_PASSWORD."
+    echo "Copy .env.example and set TELEGRAM_TOKEN, OPENAI_API_KEY, ALLOWED_USER_IDS."
     exit 1
 fi
 

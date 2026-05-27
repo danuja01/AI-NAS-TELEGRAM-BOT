@@ -558,8 +558,6 @@ def format_file_list_numbered(files: List[Dict[str, Any]], path: str) -> str:
         if len(files_list) > 20:
             msg += f"\n_...and {len(files_list) - 20} more files_\n"
         
-        msg += "\n💡 Use `/download <number>` to download a file\n"
-    
     return msg
 
 

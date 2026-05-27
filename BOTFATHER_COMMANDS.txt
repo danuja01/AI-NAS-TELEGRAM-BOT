@@ -29,12 +29,9 @@ dstop - Stop a container
 dtail - Container log tail
 
 files - Browse files
-ls - List directory
 find - Find files
 tree - Directory tree
 storage - Disk usage paths
-download - Download file
-uploadfile - Upload file
 
 services - System services
 restart_service - Restart service
@@ -52,11 +49,6 @@ index - Re-index documents
 clear - Clear history
 cancel - Cancel pending AI input
 
-rootlogin - Root session
-rootlogout - End root
-rootstatus - Root session status
-ssh - Remote shell cmd
-cd - Working directory
 updates - Check APT/OMV updates
 omv_updates - Updates + OMV note
 upgrade - Run omv-upgrade (confirm)

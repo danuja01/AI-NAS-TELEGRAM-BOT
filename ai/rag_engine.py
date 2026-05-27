@@ -235,7 +235,7 @@ async def ask(
         if config.AGENT_HOST_READONLY_TOOL:
             rag_ro = (
                 "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** may appear: allow-listed read-only "
-                "host diagnostics over SSH/nsenter (fixed argv, not arbitrary shell); it **does not** replace **`/ssh`**. "
+                "host diagnostics over SSH/nsenter (fixed argv, not arbitrary shell). "
             )
         rag_system = with_nas_scope(
             "You are a helpful AI assistant for a NAS Telegram bot. Answer using the provided context. "

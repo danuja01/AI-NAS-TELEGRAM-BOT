@@ -28,7 +28,7 @@ from monitoring.health_checker import start_health_monitoring
 from utils.startup_auto_index import run_auto_index_on_startup
 
 # Import command handlers
-from commands import basic, monitoring, docker_cmds, docker_storage_cmds, filesystem, ai_cmds, service, root_cmds, operations
+from commands import basic, monitoring, docker_cmds, docker_storage_cmds, filesystem, ai_cmds, service, operations
 from commands import text_followup
 
 # Setup logging
@@ -82,12 +82,9 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("dstop", "Stop a container"),
     BotCommand("dtail", "Container log tail"),
     BotCommand("files", "Browse files"),
-    BotCommand("ls", "List directory"),
     BotCommand("find", "Find files"),
     BotCommand("tree", "Directory tree"),
     BotCommand("storage", "Disk usage paths"),
-    BotCommand("download", "Download file"),
-    BotCommand("uploadfile", "Upload file"),
     BotCommand("services", "System services"),
     BotCommand("restart_service", "Restart service"),
     BotCommand("reboot", "Reboot (confirm)"),
@@ -102,11 +99,6 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("index", "Re-index documents"),
     BotCommand("clear", "Clear history"),
     BotCommand("cancel", "Cancel pending AI input"),
-    BotCommand("rootlogin", "Root session"),
-    BotCommand("rootlogout", "End root"),
-    BotCommand("rootstatus", "Root session status"),
-    BotCommand("ssh", "Remote shell cmd"),
-    BotCommand("cd", "Working directory"),
     BotCommand("updates", "Check APT/OMV updates"),
     BotCommand("omv_updates", "Updates + OMV note"),
     BotCommand("upgrade", "Run omv-upgrade (confirm)"),
@@ -228,18 +220,9 @@ def main():
     
     # Register command handlers - File System
     application.add_handler(CommandHandler("files", filesystem.files_command))
-    application.add_handler(CommandHandler("ls", filesystem.ls_command))
     application.add_handler(CommandHandler("find", filesystem.find_command))
     application.add_handler(CommandHandler("tree", filesystem.tree_command))
     application.add_handler(CommandHandler("storage", filesystem.storage_command))
-    application.add_handler(CommandHandler("download", filesystem.download_command))
-    application.add_handler(CommandHandler("uploadfile", filesystem.upload_command))
-    
-    # Register message handler for file uploads with caption
-    application.add_handler(MessageHandler(
-        filters.Document.ALL | filters.PHOTO,
-        filesystem.handle_file_with_caption
-    ))
     
     # Register command handlers - Service Management
     application.add_handler(CommandHandler("services", service.services_command))
@@ -258,13 +241,6 @@ def main():
     application.add_handler(CommandHandler("index", ai_cmds.index_command))
     application.add_handler(CommandHandler("clear", ai_cmds.clear_command))
     
-    # Register command handlers - Root Access
-    application.add_handler(CommandHandler("rootlogin", root_cmds.rootlogin_command))
-    application.add_handler(CommandHandler("rootlogout", root_cmds.rootlogout_command))
-    application.add_handler(CommandHandler("rootstatus", root_cmds.rootstatus_command))
-    application.add_handler(CommandHandler("ssh", root_cmds.ssh_command))
-    application.add_handler(CommandHandler("cd", root_cmds.cd_command))
-
     # Host / OMV maintenance
     application.add_handler(CommandHandler("updates", operations.updates_command))
     application.add_handler(CommandHandler("omv_updates", operations.omv_updates_command))
