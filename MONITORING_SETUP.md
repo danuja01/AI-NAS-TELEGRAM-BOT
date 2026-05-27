@@ -198,6 +198,7 @@ The HTTP hook runs **inside** the bot container, not on the NAS host by default.
 | Symptom | Fix |
 |--------|-----|
 | `curl: (7) Failed to connect` from host script | Pull latest `scripts/notify_watchtower.sh` (auto uses `docker exec`). For host port: `docker compose up -d --force-recreate` (not just `restart`) |
+| `curl: (56) Connection reset by peer` on host `:18765/health` | Bot was listening on `127.0.0.1` *inside* the container only — set `CRON_NOTIFY_BIND=0.0.0.0` in compose (default in repo) and recreate |
 | Hook never starts | `CRON_NOTIFY_SECRET` missing or empty in container env |
 | Watchtower in Docker, bot in Docker | Use `generic+http://host.docker.internal:18765/watchtower?secret=...` (with published host port) |
 | Test without publishing port | `CRON_NOTIFY_MODE=docker ./scripts/notify_watchtower.sh "test"` |
@@ -231,7 +232,26 @@ Shoutrrr sends JSON with `title` and `message`; the bot formats it as a **Watcht
 
 - **Bot + Watchtower on host:** `127.0.0.1:18765` (bot must run on host, not only in Docker).
 - **Bot in Docker (this repo’s compose):** publish `127.0.0.1:18765` on the host (default in `docker-compose.yml`), then use `127.0.0.1` from the host or `host.docker.internal` from another container.
+- **Watchtower in Docker:** `host.docker.internal:18765` + `extra_hosts: host.docker.internal:host-gateway` (see compose below).
 - **Watchtower in Docker, no published port:** `docker exec nas-telegram-bot curl ...` or set `CRON_NOTIFY_MODE=docker` for the test script.
+
+**Watchtower `docker-compose.yml` (works with bot compose port publish):**
+
+```yaml
+services:
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_NOTIFICATIONS: shoutrrr
+      WATCHTOWER_NOTIFICATION_URL: >-
+        generic+http://host.docker.internal:18765/watchtower?secret=YOUR_CRON_NOTIFY_SECRET
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+```
 
 ### Option B — POST from a script
 
