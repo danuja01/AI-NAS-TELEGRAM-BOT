@@ -39,7 +39,7 @@ HELP_SECTION_BODIES: dict[str, str] = {
         "<code>/monitor_stats</code> — MTBF/MTTR + latency sparkline for one monitor\n"
         "<code>/monitor_groups</code> — Monitor groups · <code>/monitor_tag</code> tags\n"
         "<code>/monitor_images</code> — Scan Docker image updates\n"
-        "<code>/alerts</code> — Unacknowledged alerts · <code>/alert_ack &lt;id&gt;</code>\n"
+        "<code>/alerts</code> — Unacknowledged alerts · <code>/alert_ack all</code> or <code>/alert_ack &lt;id&gt;</code>\n"
         "<i>Background alerts: CPU/RAM/disk/SMART/Docker/systemd + custom monitors.</i>\n"
     ),
     "dock": (

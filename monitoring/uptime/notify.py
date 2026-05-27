@@ -26,8 +26,8 @@ def _alert_keyboard(monitor: Dict[str, Any], user_id: int) -> InlineKeyboardMark
     rows = [
         [
             InlineKeyboardButton(
-                "✅ Ack",
-                callback_data=callback_data_for_user("uack", user_id, str(mid)),
+                "✅ Ack all",
+                callback_data=callback_data_for_user("uackall", user_id),
             ),
             InlineKeyboardButton(
                 "🔕 Silence 1h",
@@ -94,9 +94,6 @@ async def send_monitor_down(
         text += "\n<b>Root cause — affected services:</b>\n"
         for c in affected_children:
             text += f"• <code>{escape_telegram_html(c)}</code>\n"
-    if ai_summary:
-        text += f"\n🤖 <b>AI Analysis</b>\n{escape_telegram_html(ai_summary[:3500])}"
-
     icons = {"info": "ℹ️", "warning": "⚠️", "critical": "🔴"}
     icon = icons.get(severity, "🔴")
     text = text.replace("🚨", icon, 1)
@@ -115,13 +112,25 @@ async def send_monitor_down(
         except Exception as e:
             logger.error("uptime down alert %s: %s", uid, e)
             continue
+        if ai_summary:
+            from utils.telegram_reply import bot_send_ai_markdown
+
+            await bot_send_ai_markdown(
+                bot,
+                uid,
+                ai_summary,
+                title="AI Analysis",
+            )
         plain = html_reply_to_context_plain(text, max_len=12000)
         if plain:
+            conv_out = plain
+            if ai_summary:
+                conv_out = f"{plain}\n\n[AI Analysis]\n{ai_summary[:4000]}"
             await save_conversation(
                 uid,
                 "assistant",
                 f"[Monitor DOWN: {name}]",
-                command_output=plain,
+                command_output=conv_out,
                 metadata={"source": "uptime_alert", "monitor_id": monitor["id"]},
             )
 

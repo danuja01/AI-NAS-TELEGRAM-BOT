@@ -168,15 +168,13 @@ def _evidence_to_context(evidence: Dict[str, Any]) -> str:
     return raw
 
 
-def _format_diagnosis_html(alerts: List[Dict[str, Any]], analysis: str) -> str:
+def _format_diagnosis_header_html(alerts: List[Dict[str, Any]]) -> str:
     types = ", ".join(sorted({a.get("type", "?") for a in alerts}))
-    header = (
+    return (
         "🔍 <b>Autonomous troubleshooting</b>\n"
         f"<i>Advisory only — nothing was changed on the host.</i>\n"
-        f"Triggers: <code>{escape_telegram_html(types)}</code>\n\n"
+        f"Triggers: <code>{escape_telegram_html(types)}</code>"
     )
-    body = escape_telegram_html(analysis.strip())
-    return header + body
 
 
 async def _run_ai_analysis(
@@ -217,25 +215,32 @@ async def _run_ai_analysis(
         return None
 
 
-async def _notify_users(bot: Bot, html_message: str, metadata: Dict[str, Any]) -> None:
+async def _notify_users(
+    bot: Bot,
+    header_html: str,
+    analysis_markdown: str,
+    metadata: Dict[str, Any],
+) -> None:
     if not config.ALLOWED_USER_IDS:
         return
-    parts = split_text_for_telegram(html_message, chunk_size=3800)
+    from utils.telegram_reply import bot_send_ai_markdown
+
     for uid in config.ALLOWED_USER_IDS:
-        for i, part in enumerate(parts):
-            text = part
-            if len(parts) > 1:
-                text = (
-                    f"{part}\n\n<i>(part {i + 1}/{len(parts)})</i>"
+        try:
+            await bot.send_message(uid, header_html, parse_mode=ParseMode.HTML)
+            if analysis_markdown and analysis_markdown.strip():
+                await bot_send_ai_markdown(
+                    bot,
+                    uid,
+                    analysis_markdown,
+                    title="",
                 )
-            try:
-                await bot.send_message(
-                    uid, text, parse_mode=ParseMode.HTML
-                )
-            except Exception as e:
-                logger.error("Autotroubleshoot send failed uid=%s: %s", uid, e)
-                break
-        plain = html_reply_to_context_plain(html_message, max_len=12000)
+        except Exception as e:
+            logger.error("Autotroubleshoot send failed uid=%s: %s", uid, e)
+            continue
+        plain = html_reply_to_context_plain(
+            header_html + "\n\n" + (analysis_markdown or ""), max_len=12000
+        )
         if plain:
             try:
                 await save_conversation(
@@ -321,10 +326,11 @@ async def run_autotroubleshoot_for_alerts(
     if not analysis or not analysis.strip():
         return False
 
-    html = _format_diagnosis_html(batch, analysis)
+    header = _format_diagnosis_header_html(batch)
     await _notify_users(
         bot,
-        html,
+        header,
+        analysis,
         metadata={
             "source": "autotroubleshoot",
             "alert_types": sorted({a.get("type") for a in batch}),
