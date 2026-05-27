@@ -41,18 +41,14 @@ Destructive actions use Telegram confirmations; tell users to run the command th
 - `/dstop <name>` — Stop (inline confirm)
 - In **/chat** and **/analyze**, the assistant may call tools that post the **same** restart/stop confirmation prompts (nothing runs until you tap Confirm).
 - When `AGENT_HOST_READONLY_TOOL=true` in `.env`, the assistant may call **`nas_host_readonly_profile`**: a fixed enum of
-  read-only host commands over SSH/nsenter (not arbitrary shell; **not** a substitute for `/ssh`).
+  read-only host commands over SSH/nsenter (not arbitrary shell).
 - `/dtail <name> [lines]` — Container logs (default 50 lines, up to 2000)
 
 ## Files
 - `/files` — Browse default documents folder
-- `/ls [path]` — List directory (numbered entries)
 - `/find` — Search filenames under allowed roots
 - `/tree` — Directory tree
 - `/storage` — Disk usage for configured paths
-- `/download` — Download by number from `/ls` or ZIP range
-- `/uploadfile` — Upload (often needs root session)
-- `/cd` — Print or change working directory (root session for full paths)
 
 ## AI and documents
 - In a **private chat** with the bot, a normal text line (no `/`) is treated like **`/chat`**, unless the wording matches deep-analysis intent (then same as **`/analyze`**).
@@ -73,8 +69,6 @@ Destructive actions use Telegram confirmations; tell users to run the command th
 - `/reboot`, `/shutdown` — Host power (confirmations)
 - `/updates`, `/omv_updates` — APT/OMV updates
 - `/upgrade` — Run omv-upgrade (strong confirmation)
-- `/rootlogin`, `/rootstatus`, `/rootlogout` — Short root session
-- `/ssh` — One host shell command (root only)
 
 ## Notes
 - `/restart`, `/stop`, `/logs` are legacy redirects to `/drestart`, `/dstop`, `/dtail`.

@@ -15,7 +15,6 @@ A comprehensive self-hosted Telegram AI assistant for managing your NAS server. 
 | API keys setup | [API Setup](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/API-Setup) |
 | Every command | [Commands Reference](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Commands-Reference) |
 | AI & RAG | [AI and RAG](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/AI-and-RAG) |
-| Root access & `/ssh` | [Root Access and SSH](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Root-Access-and-SSH) |
 | Troubleshooting | [Troubleshooting](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Troubleshooting) |
 | FAQ | [FAQ](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/FAQ) |
 
@@ -34,7 +33,7 @@ git clone https://github.com/danuja01/AI-NAS-TELEGRAM-BOT.git
 cd AI-NAS-TELEGRAM-BOT/BOT
 
 cp .env.example .env
-# Edit .env: TELEGRAM_TOKEN, OPENAI_API_KEY, ALLOWED_USER_IDS, ROOT_PASSWORD
+# Edit .env: TELEGRAM_TOKEN, OPENAI_API_KEY, ALLOWED_USER_IDS
 
 mkdir -p data logs documents
 docker-compose up -d
@@ -101,17 +100,7 @@ docker exec nas-telegram-bot curl -sS -X POST http://127.0.0.1:18765/notify \
 
 ### File System
 - Secure browsing with path restrictions (`ALLOWED_PATHS`)
-- Numbered file listings (`/ls`) for easy selection
-- Download files by number (`/download`)
-- Upload files with root access (`/uploadfile`)
-- Search (`/find`), directory tree (`/tree`), storage analysis (`/storage`)
-- Relative paths resolve under `DOCUMENT_PATH` (e.g. `/ls DANUJA`)
-
-### Root Access & SSH
-- Temporary elevated access for 30 minutes (`/rootlogin`)
-- Full filesystem access when root session is active
-- Execute shell commands via `/ssh` (logged, 60s timeout)
-- Session status and early logout (`/rootstatus`, `/rootlogout`)
+- Browse documents (`/files`), search (`/find`), directory tree (`/tree`), storage analysis (`/storage`)
 
 ### AI Assistant (RAG)
 - Document Q&A from your files (`/ask`) — PDF, DOCX, TXT, MD
@@ -134,7 +123,6 @@ docker exec nas-telegram-bot curl -sS -X POST http://127.0.0.1:18765/notify \
 - User whitelist (`ALLOWED_USER_IDS`)
 - Rate limiting (10 commands/minute)
 - Path validation and audit logging
-- Password-protected root sessions
 
 ---
 
@@ -188,7 +176,6 @@ OPENAI_API_KEY=sk-your_openai_key
 ALLOWED_USER_IDS=your_telegram_user_id
 DOCUMENT_PATH=/path/to/documents
 ALLOWED_PATHS=/path/to/documents
-ROOT_PASSWORD=your_secure_password
 ```
 
 Get your Telegram user ID from [@userinfobot](https://t.me/userinfobot). Full reference: [Configuration Guide](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Configuration-Guide).
@@ -203,15 +190,9 @@ Use `/help` in Telegram for the full list. Highlights:
 |----------|----------|
 | Monitoring | `/status`, `/cpu`, `/ram`, `/disk`, `/temps`, `/network`, `/netpublic`, `/netping`, `/uptime`, `/health`, `/smart`, `/drives` |
 | Docker | `/docker`, `/containers`, `/dstart`, `/drestart`, `/dstop`, `/dtail`, … |
-| Files | `/files`, `/ls`, `/download`, `/uploadfile`, `/find`, `/tree`, `/storage` |
+| Files | `/files`, `/find`, `/tree`, `/storage` |
 | AI | `/ask`, `/chat`, `/summarize`, `/explain`, `/analyze`, `/think`, `/websearch`, `/index`, `/clear` |
-| Root | `/rootlogin`, `/rootstatus`, `/rootlogout`, `/ssh` |
 | Services | `/services`, `/restart_service`, `/reboot`, `/shutdown` |
-
-**Tips:**
-- After `/ls`, use `/download 1` to fetch file #1 (cache lasts ~10 minutes)
-- `/uploadfile` and `/ssh` require an active root session
-- `/ssh ls` defaults to the documents folder in Docker (`/app/documents`)
 
 Complete reference: [Commands Reference wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Commands-Reference)
 
@@ -263,18 +244,15 @@ BOT/
 │   ├── basic.py           # /start, /help
 │   ├── monitoring.py
 │   ├── docker_cmds.py
-│   ├── filesystem.py      # /ls, /download, /uploadfile
+│   ├── filesystem.py      # /files, /find, /tree, /storage
 │   ├── ai_cmds.py
 │   ├── service.py
-│   └── root_cmds.py       # /rootlogin, /ssh
 ├── services/
 ├── ai/                    # RAG, GPT, search
 ├── database/
 ├── monitoring/
 ├── utils/
 │   ├── security.py
-│   ├── root_session.py
-│   └── file_cache.py
 ├── docs/
 ├── data/
 └── logs/
@@ -291,7 +269,7 @@ Architecture details: [Architecture wiki](https://github.com/danuja01/AI-NAS-TEL
 | Bot won't start / no response | [Troubleshooting wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Troubleshooting) |
 | Docker commands fail | Mount `/var/run/docker.sock` in `docker-compose.yml` |
 | SMART not found | Rebuild Docker image (`smartmontools` in Dockerfile) |
-| Path access denied | Use relative `/ls DANUJA` or `/rootlogin` |
+| Path access denied | Check `ALLOWED_PATHS` and use `/files` or `/find` under allowed roots |
 | Telegram conflict | Only one bot instance running |
 
 Logs: `tail -f logs/bot.log` or `docker-compose logs -f`
@@ -312,10 +290,9 @@ Use `/clear`, prefer `gpt-5.4-nano` for routine tasks, and set billing limits on
 ## Security
 
 1. Never commit `.env`
-2. Use a strong `ROOT_PASSWORD`
-3. Limit `ALLOWED_USER_IDS` to trusted users
-4. Restrict `ALLOWED_PATHS` to what you need
-5. Review logs for root/SSH activity
+2. Limit `ALLOWED_USER_IDS` to trusted users
+3. Restrict `ALLOWED_PATHS` to what you need
+4. Review logs for privileged operations (Docker restarts, host upgrades)
 
 Full guide: [Security wiki](https://github.com/danuja01/AI-NAS-TELEGRAM-BOT/wiki/Security)
 

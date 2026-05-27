@@ -18,15 +18,12 @@ from utils.followup_state import (
     clear_cmd_pending,
     get_ai_pending,
     get_cmd_pending,
-    FOLLOWUP_ROOTLOGIN,
-    FOLLOWUP_SSH,
     FOLLOWUP_DOCKER_RESTART,
     FOLLOWUP_DOCKER_STOP,
     FOLLOWUP_DOCKER_DSTART,
     FOLLOWUP_DOCKER_LOGS,
     FOLLOWUP_RESTART_SERVICE,
     FOLLOWUP_FIND,
-    FOLLOWUP_DOWNLOAD,
 )
 from utils.plain_text_ai_intent import plain_text_prefers_analyze
 from utils.security import enforce_message_rate_limit_reply, is_user_authorized
@@ -35,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 async def unified_pending_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle follow-up text after /ask, /rootlogin, etc., or implicit /chat in private."""
+    """Handle follow-up text after /ask, /find, etc., or implicit /chat in private."""
     user = update.effective_user
     if not user or not update.message:
         return
@@ -76,16 +73,9 @@ async def unified_pending_text_handler(update: Update, context: ContextTypes.DEF
             return
         clear_cmd_pending(context)
 
-        from commands import root_cmds, docker_cmds, service, filesystem
+        from commands import docker_cmds, service, filesystem
 
-        if cmd == FOLLOWUP_ROOTLOGIN:
-            await update.message.reply_text(
-                "🔒 For security, send `/rootlogin <password>` in one private message (not as follow-up).",
-                parse_mode="Markdown",
-            )
-        elif cmd == FOLLOWUP_SSH:
-            await root_cmds.run_ssh_command(update, context, user_id, text)
-        elif cmd == FOLLOWUP_DOCKER_RESTART:
+        if cmd == FOLLOWUP_DOCKER_RESTART:
             name = text.split()[0]
             await docker_cmds.send_restart_confirmation(update, context, user_id, name)
         elif cmd == FOLLOWUP_DOCKER_STOP:
@@ -120,8 +110,6 @@ async def unified_pending_text_handler(update: Update, context: ContextTypes.DEF
             await service.send_restart_service_confirmation(update, context, user_id, sname)
         elif cmd == FOLLOWUP_FIND:
             await filesystem.run_find(update, context, user_id, text)
-        elif cmd == FOLLOWUP_DOWNLOAD:
-            await filesystem.run_download_from_tokens(update, context, user_id, text.split())
         return
 
     # Private chat: plain text without a slash command runs /chat (or /analyze-style when phrasing asks).

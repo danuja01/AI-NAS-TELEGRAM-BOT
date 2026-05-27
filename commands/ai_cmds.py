@@ -132,7 +132,7 @@ async def execute_chat(
         if config.AGENT_HOST_READONLY_TOOL:
             _ro_chat = (
                 "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** runs allow-listed read-only "
-                "host diagnostics over SSH/nsenter (fixed argv, not arbitrary shell) and **does not** replace **`/ssh`**. "
+                "host diagnostics over SSH/nsenter (fixed argv, not arbitrary shell). "
             )
         response = await generate_with_tools_loop(
             prompt=message,
@@ -268,7 +268,7 @@ async def execute_analyze(
         if config.AGENT_HOST_READONLY_TOOL:
             _ro_analyze = (
                 "When AGENT_HOST_READONLY_TOOL is enabled, **nas_host_readonly_profile** is allow-listed read-only host "
-                "diagnostics via SSH/nsenter (fixed argv, not arbitrary shell); it **does not** replace **`/ssh`**. "
+                "diagnostics via SSH/nsenter (fixed argv, not arbitrary shell). "
             )
         analyze_system = with_nas_scope(
             "You are an expert technical assistant with deep reasoning. "

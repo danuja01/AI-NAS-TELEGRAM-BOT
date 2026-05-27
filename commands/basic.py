@@ -54,13 +54,9 @@ HELP_SECTION_BODIES: dict[str, str] = {
     "files": (
         "<b>Files</b>\n\n"
         "<code>/files</code> — Browse the default document folder\n"
-        "<code>/ls</code> — List dir with numbered files (optional path; <code>--all</code> for hidden)\n"
         "<code>/find</code> — Search filenames under allowed roots\n"
         "<code>/tree</code> — Directory tree outline\n"
         "<code>/storage</code> — Disk usage summary for key paths\n"
-        "<code>/download</code> — Download file by number after /ls, or ZIP a range\n"
-        "<code>/uploadfile</code> — Send a document to NAS (needs root)\n"
-        "<code>/cd</code> — Print or change working directory (root session for full paths)\n"
     ),
     "ai": (
         "<b>AI</b>\n\n"
@@ -84,10 +80,6 @@ HELP_SECTION_BODIES: dict[str, str] = {
         "<code>/updates</code> — Check APT / OMV updates on the host\n"
         "<code>/omv_updates</code> — Updates plus OMV-specific note\n"
         "<code>/upgrade</code> — Run omv-upgrade (strong confirmation)\n"
-        "<code>/rootlogin</code> — Start a short root session (password)\n"
-        "<code>/rootstatus</code> — See if root session is active\n"
-        "<code>/rootlogout</code> — End root session\n"
-        "<code>/ssh</code> — Run one shell command on host (root only)\n"
     ),
 }
 
@@ -160,7 +152,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• <code>/status</code> — system snapshot\n"
         "• <code>/docker</code> — Docker dashboard\n"
         "• <code>/containers</code> — quick container list\n"
-        "• <code>/ls</code> / <code>/ask</code> / <code>/services</code>\n\n"
+        "• <code>/files</code> / <code>/ask</code> / <code>/services</code>\n\n"
         "<i>Tap a category — each message lists one command per line with a short description.</i>"
     )
     await update.message.reply_text(

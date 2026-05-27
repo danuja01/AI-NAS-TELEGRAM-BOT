@@ -23,18 +23,10 @@ logger = logging.getLogger(__name__)
 
 # Rate limiting storage: {user_id: deque of timestamps}
 rate_limit_storage = defaultdict(lambda: deque(maxlen=config.MAX_COMMANDS_PER_MINUTE))
-root_login_rate_storage = defaultdict(lambda: deque(maxlen=20))
-root_login_failure_storage = defaultdict(lambda: deque(maxlen=20))
-
-_SHELL_METACHAR_PATTERN = re.compile(r"[|;&`$()<>\n\r]|(?:\$\()")
 
 
 def is_user_authorized(user_id: int) -> bool:
     return bool(config.ALLOWED_USER_IDS) and user_id in config.ALLOWED_USER_IDS
-
-
-def ssh_command_has_shell_metacharacters(command: str) -> bool:
-    return bool(_SHELL_METACHAR_PATTERN.search(command))
 
 
 async def reject_unauthorized_callback(query) -> bool:
@@ -129,97 +121,16 @@ def rate_limit(func: Callable) -> Callable:
     return wrapper
 
 
-def root_login_rate_limit(func: Callable) -> Callable:
-    """Stricter per-minute limit for /rootlogin (separate from general commands)."""
-    @wraps(func)
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        user_id = update.effective_user.id
-        if is_root_login_locked(user_id):
-            await reply_text_safe(
-                update,
-                "🔒 Too many failed root login attempts. Try again later.",
-            )
-            return
-        now = time.time()
-        bucket = root_login_rate_storage[user_id]
-        while bucket and now - bucket[0] > 60:
-            bucket.popleft()
-        if len(bucket) >= config.ROOT_LOGIN_RATE_PER_MINUTE:
-            await reply_text_safe(update, "⏱ Root login rate limit exceeded. Wait a minute.")
-            return
-        bucket.append(now)
-        return await func(update, context, *args, **kwargs)
-
-    return wrapper
-
-
-def is_root_login_locked(user_id: int) -> bool:
-    window = config.ROOT_LOGIN_LOCKOUT_MINUTES * 60
-    now = time.time()
-    fails = root_login_failure_storage[user_id]
-    while fails and now - fails[0] > window:
-        fails.popleft()
-    return len(fails) >= config.ROOT_LOGIN_MAX_ATTEMPTS
-
-
-def record_root_login_failure(user_id: int) -> None:
-    root_login_failure_storage[user_id].append(time.time())
-    log_security_event("root_login_failure", user_id, "invalid password")
-
-
-def clear_root_login_failures(user_id: int) -> None:
-    root_login_failure_storage.pop(user_id, None)
-
-
 def redact_command_for_storage(command: str) -> str:
     cmd = (command or "").strip()
     if not cmd:
         return cmd
     low = cmd.lower()
-    if low.startswith("/rootlogin"):
-        return "/rootlogin [redacted]"
-    if low.startswith("/ssh"):
-        return "/ssh [redacted]"
     if "password" in low or "token" in low:
         return cmd.split()[0] + " [redacted]"
     if len(cmd) > 200:
         return cmd[:120] + "… [truncated]"
     return cmd
-
-
-def resolve_upload_path(
-    base_documents: str,
-    subfolder: Optional[str],
-    filename: str,
-    *,
-    allowed_roots: Optional[List[str]] = None,
-) -> Tuple[Optional[Path], Optional[str]]:
-    base = Path(base_documents).resolve()
-    safe_name = sanitize_filename(filename)
-    if not safe_name:
-        return None, "Invalid filename"
-    rel = Path(sanitize_filename(subfolder)) if subfolder else Path(".")
-    for part in rel.parts:
-        if part in (".", "..") or ".." in part:
-            return None, "Invalid subfolder path"
-    target_dir = (base / rel).resolve()
-    try:
-        target_dir.relative_to(base)
-    except ValueError:
-        return None, "Upload path escapes documents directory"
-    if allowed_roots:
-        ok = any(
-            target_dir == Path(r).resolve() or str(target_dir).startswith(str(Path(r).resolve()) + "/")
-            for r in allowed_roots if r
-        )
-        if not ok:
-            try:
-                ok = any(target_dir.relative_to(Path(r).resolve()) for r in allowed_roots if r)
-            except ValueError:
-                ok = False
-        if not ok:
-            return None, "Upload path not in allowed directories"
-    return target_dir / safe_name, None
 
 
 async def enforce_message_rate_limit_reply(update: Update, user_id: int) -> bool:
@@ -248,17 +159,13 @@ def validate_path(path_str: str, allowed_paths: List[str] = None, user_id: int =
     
     Args:
         path_str: The path to validate
-        allowed_paths: List of allowed base paths (defaults to config.ALLOWED_PATHS or root session paths)
-        user_id: User ID for checking root session status
+        allowed_paths: List of allowed base paths (defaults to config.ALLOWED_PATHS)
+        user_id: Reserved for API compatibility (ignored)
     
     Returns:
         True if path is valid and allowed, False otherwise
     """
-    # Check for root session if user_id is provided
-    if user_id is not None and allowed_paths is None:
-        from utils.root_session import RootSessionManager
-        allowed_paths = RootSessionManager.get_allowed_paths_for_user(user_id)
-    elif allowed_paths is None:
+    if allowed_paths is None:
         allowed_paths = config.ALLOWED_PATHS
     
     if not allowed_paths:
