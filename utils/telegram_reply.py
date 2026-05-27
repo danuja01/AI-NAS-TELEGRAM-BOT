@@ -166,6 +166,81 @@ async def reply_ai_markdown_chunked(
     return True
 
 
+async def bot_send_ai_markdown(
+    bot,
+    chat_id: int,
+    raw_markdown: str,
+    *,
+    title: str = "AI Analysis",
+    max_utf16: int = 3800,
+) -> bool:
+    """
+    Send LLM markdown to a chat using Telegram MarkdownV2 (telegramify-markdown).
+    Use for alert AI blocks instead of embedding raw ** / ## in HTML messages.
+    """
+    from telegram.constants import ParseMode
+
+    body = normalize_ai_reply_markdown_for_telegram((raw_markdown or "").strip())
+    if not body:
+        return False
+    if title:
+        body = f"*{title}*\n\n{body}"
+
+    try:
+        from telegramify_markdown import convert, split_markdownv2
+    except ImportError:
+        from utils.formatters import format_ai_response
+
+        try:
+            await bot.send_message(
+                chat_id,
+                format_ai_response(raw_markdown or ""),
+                parse_mode="Markdown",
+            )
+            return True
+        except Exception as e:
+            logger.error("bot_send_ai_markdown fallback failed %s: %s", chat_id, e)
+            return False
+
+    try:
+        text, entities = convert(body)
+        parts = split_markdownv2(text, entities, max_utf16_len=max_utf16)
+    except Exception as e:
+        logger.warning("bot_send_ai_markdown convert failed: %s", e)
+        from utils.formatters import format_ai_response
+
+        try:
+            await bot.send_message(
+                chat_id,
+                format_ai_response(raw_markdown or ""),
+                parse_mode="Markdown",
+            )
+            return True
+        except Exception as e2:
+            logger.error("bot_send_ai_markdown failed %s: %s", chat_id, e2)
+            return False
+
+    if not parts:
+        return False
+
+    ok = False
+    for part in parts:
+        chunk = (part or "").strip()
+        if not chunk:
+            continue
+        try:
+            await bot.send_message(chat_id, chunk, parse_mode=ParseMode.MARKDOWN_V2)
+            ok = True
+        except BadRequest as e:
+            logger.warning("bot_send_ai_markdown send failed %s: %s", chat_id, e)
+            try:
+                await bot.send_message(chat_id, chunk[:4080], parse_mode=None)
+                ok = True
+            except Exception as e2:
+                logger.error("bot_send_ai_markdown plain failed %s: %s", chat_id, e2)
+    return ok
+
+
 async def reply_text_safe(
     update: Update,
     text: str,

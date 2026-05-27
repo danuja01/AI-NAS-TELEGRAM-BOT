@@ -19,9 +19,10 @@ import time
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Awaitable, Callable, Optional
+from urllib.parse import parse_qs, urlparse
 
 import config
-from utils.formatters import escape_telegram_html
+from monitoring.external_notify import format_notify_telegram_html
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +59,12 @@ def _make_handler(schedule_plain_text: Callable[[str], None], loop: asyncio.Abst
             logger.debug("%s - %s", self.address_string(), fmt % args)
 
         def do_POST(self):  # noqa: N802
-            path = self.path.rstrip("/")
+            parsed = urlparse(self.path)
+            path = parsed.path.rstrip("/")
             if path.startswith("/push/"):
                 self._handle_push(path[len("/push/"):])
                 return
-            if path != "/notify":
+            if path not in ("/notify", "/watchtower"):
                 self.send_response(404)
                 self.end_headers()
                 return
@@ -84,29 +86,20 @@ def _make_handler(schedule_plain_text: Callable[[str], None], loop: asyncio.Abst
             try:
                 data = json.loads(body) if body else {}
             except json.JSONDecodeError:
-                self.send_response(400)
-                self.end_headers()
-                self.wfile.write(b"invalid json")
-                return
+                data = {"message": body.strip()} if body.strip() else {}
 
-            if not _secret_ok(data.get("secret", "")):
+            if path == "/watchtower":
+                data.setdefault("source", "watchtower")
+
+            qs = parse_qs(parsed.query)
+            secret = data.get("secret") or (qs.get("secret", [""])[0] if qs.get("secret") else "")
+            if not _secret_ok(str(secret)):
                 logger.warning("cron_notify: bad secret from %s", ip)
                 self.send_response(403)
                 self.end_headers()
                 return
 
-            job = escape_telegram_html(str(data.get("job", "job")))
-            status = escape_telegram_html(str(data.get("status", "unknown")))
-            msg = escape_telegram_html(str(data.get("message", "")))
-
-            text = (
-                f"🗓 <b>Cron / scheduled job</b>\n"
-                f"<b>Job</b>: <code>{job}</code>\n"
-                f"<b>Status</b>: <code>{status}</code>\n"
-            )
-            if msg:
-                text += f"\n{msg}"
-
+            text = format_notify_telegram_html(data)
             schedule_plain_text(text)
             self.send_response(204)
             self.end_headers()

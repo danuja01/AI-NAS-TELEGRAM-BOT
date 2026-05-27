@@ -10,7 +10,8 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 import config
-from database.memory import acknowledge_alert, get_unacknowledged_alerts
+from database.memory import acknowledge_alert, acknowledge_all_alerts, get_unacknowledged_alerts
+from commands.alert_ack import acknowledge_all_and_reply, handle_acknowledge_all_text
 from monitoring.uptime import store
 from monitoring.uptime.analytics import build_weekly_report, build_monitor_stats_report
 from monitoring.uptime.builtin import sync_docker_monitors
@@ -212,7 +213,10 @@ async def alerts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"#{r['id']} [{r['severity']}] <code>{escape_telegram_html(r['type'])}</code>\n"
             f"{escape_telegram_html((r['message'] or '')[:200])}\n"
         )
-    lines.append("\nAck: <code>/alert_ack &lt;id&gt;</code>")
+    lines.append(
+        "\nAck one: <code>/alert_ack &lt;id&gt;</code> · "
+        "all: <code>/alert_ack all</code>"
+    )
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 
@@ -221,7 +225,15 @@ async def alerts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def alert_ack_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args or []
     if not args:
-        await update.message.reply_text("Usage: <code>/alert_ack &lt;id&gt;</code>", parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            "Usage:\n"
+            "<code>/alert_ack all</code> — dismiss all pending alerts\n"
+            "<code>/alert_ack &lt;id&gt;</code> — dismiss one (see /alerts)",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    if args[0].strip().lower() in ("all", "*"):
+        await acknowledge_all_and_reply(update)
         return
     try:
         await acknowledge_alert(int(args[0]))

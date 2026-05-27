@@ -183,7 +183,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Uptime monitor buttons (group -1 handler)
     from monitoring.uptime.callbacks import is_uptime_callback
 
-    if is_uptime_callback(data):
+    if is_uptime_callback(data) or (data or "").split(":", 1)[0] == "uackall":
         return
 
     if data == "cancel":

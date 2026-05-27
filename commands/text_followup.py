@@ -118,6 +118,11 @@ async def unified_pending_text_handler(update: Update, context: ContextTypes.DEF
     if not await enforce_message_rate_limit_reply(update, user_id):
         return
 
+    from commands.alert_ack import handle_acknowledge_all_text
+
+    if await handle_acknowledge_all_text(update, context):
+        return
+
     from commands import ai_cmds
 
     if plain_text_prefers_analyze(text):

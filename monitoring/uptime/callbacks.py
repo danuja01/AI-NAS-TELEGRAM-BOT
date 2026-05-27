@@ -21,7 +21,7 @@ from utils.telegram_reply import reply_text_chunked
 
 logger = logging.getLogger(__name__)
 
-_UPTIME_CB_PREFIXES = ("uack", "usil", "ulog", "urst")
+_UPTIME_CB_PREFIXES = ("uack", "uackall", "usil", "ulog", "urst")
 
 
 def is_uptime_callback(data: str) -> bool:
@@ -46,7 +46,9 @@ async def handle_uptime_callback(update: Update, context: ContextTypes.DEFAULT_T
     msg = query.message
 
     try:
-        if action == "uack":
+        if action == "uackall":
+            await _handle_ack_all(query, user_id)
+        elif action == "uack":
             await _handle_ack(query, data, user_id)
         elif action == "usil":
             await _handle_silence(query, data, user_id)
@@ -80,21 +82,42 @@ async def _clear_keyboard(query) -> None:
         logger.debug("clear keyboard: %s", e)
 
 
+async def _handle_ack_all(query, user_id: int) -> None:
+    uid, _ = parse_callback_user_id(query.data, "uackall")
+    if uid != user_id:
+        await _answer(query, "Not your button.")
+        return
+    from database.memory import acknowledge_all_alerts, get_unacknowledged_alerts
+
+    n = await acknowledge_all_alerts()
+    await _answer(query, f"Acked {n}" if n else "None pending")
+    await _clear_keyboard(query)
+    if query.message:
+        if n:
+            await query.message.reply_text(
+                f"✅ Acknowledged <b>{n}</b> alert(s) in the inbox.",
+                parse_mode=ParseMode.HTML,
+            )
+        else:
+            await query.message.reply_text("✅ No unacknowledged alerts were pending.")
+
+
 async def _handle_ack(query, data: str, user_id: int) -> None:
+    """Single Ack button — acknowledges all pending alerts (same as Ack all)."""
     uid, payload = parse_callback_user_id(data, "uack")
     if uid != user_id:
         await _answer(query, "Not your button.")
         return
-    await _answer(query, "Acknowledged")
+    from database.memory import acknowledge_all_alerts
+
+    n = await acknowledge_all_alerts()
+    await _answer(query, f"Acked {n}" if n else "Done")
     await _clear_keyboard(query)
     if query.message:
-        note = ""
-        try:
-            mid = int(payload)
-            note = f" (monitor #{mid})"
-        except (TypeError, ValueError):
-            pass
-        await query.message.reply_text(f"✅ Monitor alert acknowledged{note}.")
+        await query.message.reply_text(
+            f"✅ Acknowledged <b>{n}</b> alert(s).",
+            parse_mode=ParseMode.HTML,
+        )
 
 
 async def _handle_silence(query, data: str, user_id: int) -> None:
