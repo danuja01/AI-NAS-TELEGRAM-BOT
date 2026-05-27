@@ -187,6 +187,46 @@ JOURNAL_ALERT_COOLDOWN_SECONDS = int(os.getenv("JOURNAL_ALERT_COOLDOWN_SECONDS",
 CRON_NOTIFY_SECRET = os.getenv("CRON_NOTIFY_SECRET", "").strip()
 CRON_NOTIFY_BIND = os.getenv("CRON_NOTIFY_BIND", "127.0.0.1").strip()
 CRON_NOTIFY_PORT = int(os.getenv("CRON_NOTIFY_PORT", "18765"))
+CRON_NOTIFY_RATE_PER_MINUTE = max(1, int(os.getenv("CRON_NOTIFY_RATE_PER_MINUTE", "30")))
+
+# Uptime Kuma-style monitor platform
+UPTIME_MONITORING_ENABLED = _env_bool("UPTIME_MONITORING_ENABLED", True)
+UPTIME_TICK_SECONDS = max(15, int(os.getenv("UPTIME_TICK_SECONDS", "30")))
+UPTIME_HEARTBEAT_RETENTION_DAYS = max(1, int(os.getenv("UPTIME_HEARTBEAT_RETENTION_DAYS", "30")))
+UPTIME_DEFAULT_INTERVAL = max(30, int(os.getenv("UPTIME_DEFAULT_INTERVAL", "60")))
+UPTIME_WEEKLY_REPORT_ENABLED = _env_bool("UPTIME_WEEKLY_REPORT_ENABLED", True)
+UPTIME_WEEKLY_REPORT_DAY = os.getenv("UPTIME_WEEKLY_REPORT_DAY", "sun").strip().lower()
+UPTIME_AI_ON_INCIDENT = _env_bool("UPTIME_AI_ON_INCIDENT", True)
+UPTIME_AI_COOLDOWN_MINUTES = int(os.getenv("UPTIME_AI_COOLDOWN_MINUTES", "60"))
+UPTIME_AUTO_DISCOVER_DOCKER = _env_bool("UPTIME_AUTO_DISCOVER_DOCKER", True)
+UPTIME_DASHBOARD_ENABLED = _env_bool("UPTIME_DASHBOARD_ENABLED", False)
+UPTIME_DASHBOARD_BIND = os.getenv("UPTIME_DASHBOARD_BIND", "127.0.0.1").strip()
+UPTIME_DASHBOARD_PORT = int(os.getenv("UPTIME_DASHBOARD_PORT", "18766"))
+UPTIME_DASHBOARD_SECRET = os.getenv("UPTIME_DASHBOARD_SECRET", "").strip()
+# Built-in connectivity monitors (internet, DNS, tailscale hint)
+UPTIME_BUILTIN_INTERNET = _env_bool("UPTIME_BUILTIN_INTERNET", True)
+UPTIME_BUILTIN_DNS_HOST = os.getenv("UPTIME_BUILTIN_DNS_HOST", "1.1.1.1").strip()
+UPTIME_BUILTIN_HTTP_URL = os.getenv("UPTIME_BUILTIN_HTTP_URL", "https://1.1.1.1").strip()
+# Self-healing (optional; requires explicit enable)
+UPTIME_SELF_HEAL_ENABLED = _env_bool("UPTIME_SELF_HEAL_ENABLED", False)
+UPTIME_SELF_HEAL_MAX_RESTARTS = max(1, int(os.getenv("UPTIME_SELF_HEAL_MAX_RESTARTS", "2")))
+UPTIME_SELF_HEAL_COOLDOWN_MINUTES = max(5, int(os.getenv("UPTIME_SELF_HEAL_COOLDOWN_MINUTES", "30")))
+# NAS reboot detection (psutil boot_time)
+UPTIME_REBOOT_ALERT_ENABLED = _env_bool("UPTIME_REBOOT_ALERT_ENABLED", True)
+# Built-in Tailscale / Cloudflare tunnel monitors
+UPTIME_BUILTIN_TAILSCALE = _env_bool("UPTIME_BUILTIN_TAILSCALE", True)
+UPTIME_BUILTIN_CLOUDFLARED = _env_bool("UPTIME_BUILTIN_CLOUDFLARED", True)
+# cloudflared target: empty=process, systemd, or tcp:127.0.0.1:7844
+UPTIME_CLOUDFLARED_TARGET = os.getenv("UPTIME_CLOUDFLARED_TARGET", "process").strip()
+# Docker image change alerts
+UPTIME_DOCKER_IMAGE_ALERTS = _env_bool("UPTIME_DOCKER_IMAGE_ALERTS", True)
+# Run image scan every N uptime engine ticks (30s tick → 120 ≈ 1h)
+UPTIME_DOCKER_IMAGE_SCAN_TICKS = max(10, int(os.getenv("UPTIME_DOCKER_IMAGE_SCAN_TICKS", "120")))
+# Escalation: send/re-escalate at these consecutive failure counts
+_esc = os.getenv("UPTIME_ESCALATION_THRESHOLDS", "1,3,10")
+UPTIME_ESCALATION_THRESHOLDS = tuple(
+    sorted({max(1, int(x.strip())) for x in _esc.split(",") if x.strip().isdigit()}) or [1, 3, 10]
+)
 
 # Metrics samples + digest
 METRICS_SAMPLE_INTERVAL_MINUTES = int(os.getenv("METRICS_SAMPLE_INTERVAL_MINUTES", "15"))

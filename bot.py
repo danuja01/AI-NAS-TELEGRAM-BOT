@@ -28,7 +28,7 @@ from monitoring.health_checker import start_health_monitoring
 from utils.startup_auto_index import run_auto_index_on_startup
 
 # Import command handlers
-from commands import basic, monitoring, docker_cmds, docker_storage_cmds, filesystem, ai_cmds, service, operations
+from commands import basic, monitoring, docker_cmds, docker_storage_cmds, filesystem, ai_cmds, service, operations, monitor_cmds
 from commands import text_followup
 
 # Setup logging
@@ -67,6 +67,12 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("smart", "Drive SMART"),
     BotCommand("drives", "Same as SMART"),
     BotCommand("hdddetail", "HDD SMART + spin history"),
+    BotCommand("monitors", "List uptime monitors"),
+    BotCommand("monitor_add", "Add HTTP/TCP/ping monitor"),
+    BotCommand("alerts", "Unacknowledged alerts"),
+    BotCommand("monitor_report", "Weekly uptime report"),
+    BotCommand("monitor_stats", "MTBF/MTTR and latency graph"),
+    BotCommand("monitor_groups", "List monitor groups"),
     BotCommand("docker", "Docker dashboard"),
     BotCommand("containers", "Container list (compact)"),
     BotCommand("dscan", "Docker storage scan"),
@@ -191,7 +197,31 @@ def main():
     application.add_handler(CommandHandler("smart", monitoring.smart_command))
     application.add_handler(CommandHandler("drives", monitoring.drives_command))
     application.add_handler(CommandHandler("hdddetail", monitoring.hdddetail_command))
-    
+    application.add_handler(CommandHandler("monitors", monitor_cmds.monitors_command))
+    application.add_handler(CommandHandler("monitor_add", monitor_cmds.monitor_add_command))
+    application.add_handler(CommandHandler("monitor_rm", monitor_cmds.monitor_rm_command))
+    application.add_handler(CommandHandler("monitor_pause", monitor_cmds.monitor_pause_command))
+    application.add_handler(CommandHandler("monitor_resume", monitor_cmds.monitor_resume_command))
+    application.add_handler(CommandHandler("monitor_silence", monitor_cmds.monitor_silence_command))
+    application.add_handler(CommandHandler("monitor_dep", monitor_cmds.monitor_dep_command))
+    application.add_handler(CommandHandler("monitor_discover", monitor_cmds.monitor_discover_command))
+    application.add_handler(CommandHandler("monitor_push", monitor_cmds.monitor_push_command))
+    application.add_handler(CommandHandler("monitor_report", monitor_cmds.monitor_report_command))
+    application.add_handler(CommandHandler("alerts", monitor_cmds.alerts_command))
+    application.add_handler(CommandHandler("alert_ack", monitor_cmds.alert_ack_command))
+    application.add_handler(CommandHandler("monitor_stats", monitor_cmds.monitor_stats_command))
+    application.add_handler(CommandHandler("monitor_group_create", monitor_cmds.monitor_group_create_command))
+    application.add_handler(CommandHandler("monitor_group_add", monitor_cmds.monitor_group_add_command))
+    application.add_handler(CommandHandler("monitor_groups", monitor_cmds.monitor_groups_command))
+    application.add_handler(CommandHandler("monitor_tag", monitor_cmds.monitor_tag_command))
+    application.add_handler(CommandHandler("monitor_images", monitor_cmds.monitor_images_command))
+    application.add_handler(
+        CallbackQueryHandler(
+            monitor_cmds.handle_monitor_callbacks,
+            pattern=r"^(uack|usil|ulog|urst):",
+        )
+    )
+
     # Register command handlers - Docker lifecycle
     application.add_handler(CommandHandler("docker", docker_cmds.docker_command))
     application.add_handler(CommandHandler("containers", docker_cmds.containers_command))

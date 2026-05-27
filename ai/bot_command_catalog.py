@@ -20,6 +20,10 @@ Destructive actions use Telegram confirmations; tell users to run the command th
 - `/network` — Live interfaces: state, addresses, MTU/speed, counters, default route, optional Tailscale IPv4 (`tailscale ip -4` when `NETWORK_TAILSCALE_CLI=true`)
 - `/netpublic` — Public IPv4 via HTTPS plus local outbound IP and default gateway (same sources as `/network` summary)
 - `/netping <host>` — ICMP ping (fixed 4 probes); use IP or a simple hostname
+- `/monitors` — List uptime monitors (background HTTP/TCP/ping/Docker checks)
+- `/monitor_add <name> <type> <target>` — Add monitor (http, https, tcp, ping, dns, ssl, docker, systemd, push)
+- `/monitor_report` — Weekly uptime and incident summary
+- `/alerts` — Unacknowledged alerts; `/alert_ack <id>` to dismiss
 - `/uptime` — System uptime
 - `/health` — Health score and issues list
 - `/smart` or `/drives` — SMART drive summary (smartctl) plus OMV SMART device overview when available

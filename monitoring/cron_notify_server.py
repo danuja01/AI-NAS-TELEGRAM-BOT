@@ -52,13 +52,17 @@ def _secret_ok(provided: str) -> bool:
     return hmac.compare_digest(str(provided), expected)
 
 
-def _make_handler(schedule_plain_text: Callable[[str], None]):
+def _make_handler(schedule_plain_text: Callable[[str], None], loop: asyncio.AbstractEventLoop):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             logger.debug("%s - %s", self.address_string(), fmt % args)
 
         def do_POST(self):  # noqa: N802
-            if self.path.rstrip("/") != "/notify":
+            path = self.path.rstrip("/")
+            if path.startswith("/push/"):
+                self._handle_push(path[len("/push/"):])
+                return
+            if path != "/notify":
                 self.send_response(404)
                 self.end_headers()
                 return
@@ -107,8 +111,41 @@ def _make_handler(schedule_plain_text: Callable[[str], None]):
             self.send_response(204)
             self.end_headers()
 
+        def _handle_push(self, token: str):
+            """Uptime Kuma-style push heartbeat."""
+            ip = _client_ip(self)
+            if not _rate_limit_ok(ip):
+                self.send_response(429)
+                self.end_headers()
+                return
+            token = (token or "").strip()[:128]
+            if not token:
+                self.send_response(400)
+                self.end_headers()
+                return
+
+            async def _record():
+                from monitoring.uptime.engine import record_push_for_monitor
+                return await record_push_for_monitor(token)
+
+            try:
+                fut = asyncio.run_coroutine_threadsafe(_record(), loop)
+                ok = fut.result(timeout=10)
+            except Exception as e:
+                logger.warning("push heartbeat failed: %s", e)
+                ok = False
+            if ok:
+                self.send_response(204)
+            else:
+                self.send_response(404)
+            self.end_headers()
+
         def do_GET(self):  # noqa: N802
-            if self.path.rstrip("/") == "/health":
+            path = self.path.rstrip("/")
+            if path.startswith("/push/"):
+                self._handle_push(path[len("/push/"):])
+                return
+            if path == "/health":
                 if not config.CRON_NOTIFY_SECRET:
                     self.send_response(503)
                     self.end_headers()
@@ -146,7 +183,7 @@ def start_cron_notify_server(loop: asyncio.AbstractEventLoop, send_html: Callabl
         except Exception as e:
             logger.error("schedule_notify: %s", e)
 
-    handler = _make_handler(schedule_notify)
+    handler = _make_handler(schedule_notify, loop)
     try:
         _server = HTTPServer((bind, config.CRON_NOTIFY_PORT), handler)
     except OSError as e:
