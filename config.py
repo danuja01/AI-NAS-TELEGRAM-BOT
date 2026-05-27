@@ -215,6 +215,11 @@ UPTIME_SELF_HEAL_COOLDOWN_MINUTES = max(5, int(os.getenv("UPTIME_SELF_HEAL_COOLD
 UPTIME_REBOOT_ALERT_ENABLED = _env_bool("UPTIME_REBOOT_ALERT_ENABLED", True)
 # Built-in Tailscale / Cloudflare tunnel monitors
 UPTIME_BUILTIN_TAILSCALE = _env_bool("UPTIME_BUILTIN_TAILSCALE", True)
+# Tailscale probe: auto | cli | docker | container | interface
+# auto = try CLI, then docker exec in UPTIME_TAILSCALE_CONTAINER / auto-find *tailscale* container
+UPTIME_TAILSCALE_PROBE = os.getenv("UPTIME_TAILSCALE_PROBE", "auto").strip().lower()
+UPTIME_TAILSCALE_CONTAINER = os.getenv("UPTIME_TAILSCALE_CONTAINER", "tailscale").strip()
+UPTIME_TAILSCALE_SYNC_TARGET = _env_bool("UPTIME_TAILSCALE_SYNC_TARGET", True)
 UPTIME_BUILTIN_CLOUDFLARED = _env_bool("UPTIME_BUILTIN_CLOUDFLARED", True)
 # cloudflared target: empty=process, systemd, or tcp:127.0.0.1:7844
 UPTIME_CLOUDFLARED_TARGET = os.getenv("UPTIME_CLOUDFLARED_TARGET", "process").strip()

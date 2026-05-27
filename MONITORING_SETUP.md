@@ -136,7 +136,10 @@ No manual `/monitor_add` required for basics; add custom URLs/services as needed
 | `docker` | `jellyfin` | Container running + healthy |
 | `process` | `nginx` or `cmd:immich` or `pid:1234` | Reads `/proc` |
 | `systemd` | `docker` | Needs `HOST_EXEC_MODE` |
-| `tailscale` | `online` | Runs `tailscale status --json` |
+| `tailscale` | `docker:tailscale` | `docker exec` + `tailscale status --json` (use when TS runs in Docker) |
+| `tailscale` | `docker:auto` | Find running container with *tailscale* in the name |
+| `tailscale` | `cli` / `online` | Host `tailscale` binary in PATH |
+| `tailscale` | `container:tailscale` | Only check container is running |
 | `cloudflared` | `process` / `systemd` / `tcp:127.0.0.1:7844` | Tunnel daemon |
 | `push` | `heartbeat` | Use `/monitor_push` for token |
 
@@ -253,7 +256,7 @@ Install deps: `pip install fastapi uvicorn` (included in `requirements.txt`).
 |---------|-----|
 | No alerts at all | Check `ALLOWED_USER_IDS`, bot started, `UPTIME_MONITORING_ENABLED=true` |
 | Ping monitors always fail | Install `ping`; container may need `NET_RAW` |
-| Tailscale monitor fails | Install CLI; `tailscale up` on host; `NETWORK_TAILSCALE_CLI=true` |
+| Tailscale monitor fails | **Docker TS:** `UPTIME_TAILSCALE_PROBE=docker` and `UPTIME_TAILSCALE_CONTAINER=your_container_name` (restart bot). Or `/monitor_pause tailscale-mesh`. Host install: `tailscale` CLI in PATH |
 | systemd/process monitors fail | Set `HOST_EXEC_MODE=nsenter` or `ssh` |
 | `/proc` process monitor empty | Use `pid: host` in compose |
 | Docker monitors empty | Mount `docker.sock` |

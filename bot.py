@@ -167,6 +167,17 @@ def main():
     # Register command handlers - Basic
     application.add_handler(CommandHandler("start", basic.start_command))
     application.add_handler(CommandHandler("help", basic.help_command))
+    # Uptime alert buttons (group -1 = highest priority)
+    from monitoring.uptime.callbacks import handle_uptime_callback
+
+    application.add_handler(
+        CallbackQueryHandler(
+            handle_uptime_callback,
+            pattern=r"^(uack|usil|ulog|urst):",
+        ),
+        group=-1,
+    )
+
     application.add_handler(
         CallbackQueryHandler(
             basic.help_category_callback,
@@ -215,13 +226,6 @@ def main():
     application.add_handler(CommandHandler("monitor_groups", monitor_cmds.monitor_groups_command))
     application.add_handler(CommandHandler("monitor_tag", monitor_cmds.monitor_tag_command))
     application.add_handler(CommandHandler("monitor_images", monitor_cmds.monitor_images_command))
-    application.add_handler(
-        CallbackQueryHandler(
-            monitor_cmds.handle_monitor_callbacks,
-            pattern=r"^(uack|usil|ulog|urst):",
-        )
-    )
-
     # Register command handlers - Docker lifecycle
     application.add_handler(CommandHandler("docker", docker_cmds.docker_command))
     application.add_handler(CommandHandler("containers", docker_cmds.containers_command))

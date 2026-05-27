@@ -36,25 +36,31 @@ def _alert_keyboard(monitor: Dict[str, Any], user_id: int) -> InlineKeyboardMark
         ],
     ]
     if mtype == "docker":
-        cname = monitor.get("target", "").lstrip("/")
-        rows.append([
-            InlineKeyboardButton(
-                "📋 Logs",
-                callback_data=callback_data_for_user("ulog", user_id, cname),
-            ),
-            InlineKeyboardButton(
-                "🔄 Restart",
-                callback_data=callback_data_for_user("urst", user_id, cname),
-            ),
-        ])
+        cname = monitor.get("target", "").lstrip("/")[:40]
+        try:
+            rows.append([
+                InlineKeyboardButton(
+                    "📋 Logs",
+                    callback_data=callback_data_for_user("ulog", user_id, cname),
+                ),
+                InlineKeyboardButton(
+                    "🔄 Restart",
+                    callback_data=callback_data_for_user("urst", user_id, cname),
+                ),
+            ])
+        except ValueError as e:
+            logger.warning("alert keyboard truncated for %s: %s", name, e)
     elif mtype in ("systemd", "process"):
-        unit = monitor.get("target", "")
-        rows.append([
-            InlineKeyboardButton(
-                "🔄 Restart service",
-                callback_data=callback_data_for_user("rs", user_id, unit),
-            ),
-        ])
+        unit = (monitor.get("target", "") or "")[:40]
+        try:
+            rows.append([
+                InlineKeyboardButton(
+                    "🔄 Restart service",
+                    callback_data=callback_data_for_user("rs", user_id, unit),
+                ),
+            ])
+        except ValueError as e:
+            logger.warning("alert keyboard rs for %s: %s", name, e)
     return InlineKeyboardMarkup(rows)
 
 

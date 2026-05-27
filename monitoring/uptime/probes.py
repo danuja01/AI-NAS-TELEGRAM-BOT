@@ -249,45 +249,20 @@ async def _probe_process(monitor: Dict, timeout: int) -> ProbeResult:
 
 
 async def _probe_tailscale(monitor: Dict, timeout: int) -> ProbeResult:
-    """Target optional: ignored. Checks tailscale CLI online state."""
-    import json
-    import subprocess
+    """Target: cli | docker:<name> | docker:auto | container:<name> | interface."""
+    from monitoring.uptime.tailscale_probe import run_tailscale_check
 
-    if not config.NETWORK_TAILSCALE_CLI:
-        return ProbeResult(False, error_message="NETWORK_TAILSCALE_CLI=false")
+    target = (monitor.get("target") or "docker:auto").strip()
     t0 = asyncio.get_event_loop().time()
     try:
-        proc = await asyncio.wait_for(
-            asyncio.to_thread(
-                subprocess.run,
-                ["tailscale", "status", "--json"],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            ),
-            timeout=timeout + 2,
+        ok, msg = await asyncio.wait_for(
+            asyncio.to_thread(run_tailscale_check, target, timeout),
+            timeout=timeout + 5,
         )
         latency = (asyncio.get_event_loop().time() - t0) * 1000
-        if proc.returncode != 0:
-            return ProbeResult(
-                False,
-                latency,
-                error_message=(proc.stderr or "tailscale status failed")[:500],
-            )
-        data = json.loads(proc.stdout or "{}")
-        self_node = data.get("Self") or {}
-        online = self_node.get("Online")
-        if online is True:
-            ips = self_node.get("TailscaleIPs") or []
-            return ProbeResult(
-                True,
-                latency,
-                error_message=f"online {ips[0] if ips else ''}"[:200],
-            )
-        backend = (self_node.get("BackendState") or "unknown").lower()
-        return ProbeResult(False, latency, error_message=f"Tailscale offline ({backend})")
-    except FileNotFoundError:
-        return ProbeResult(False, error_message="tailscale CLI not in PATH")
+        if ok:
+            return ProbeResult(True, latency, error_message=msg[:200])
+        return ProbeResult(False, latency, error_message=msg[:500])
     except Exception as e:
         return ProbeResult(False, error_message=str(e)[:500])
 
