@@ -66,11 +66,11 @@ def _crowdsec_disabled_hint() -> str:
     ok, probe_msg = crowdsec_probe()
     if not ok:
         lines.append(
-            f"• `docker exec {config.CROWDSEC_CONTAINER} cscli` failed: {probe_msg}"
+            f"• CrowdSec `cscli` probe failed: {probe_msg}"
         )
         lines.append(
-            "  Check container name (`CROWDSEC_CONTAINER`), that CrowdSec is running, "
-            "and that `/var/run/docker.sock` is mounted in the bot container."
+            f"  Check `CROWDSEC_CONTAINER` (now: `{config.CROWDSEC_CONTAINER}`), that CrowdSec is running, "
+            "and that `/var/run/docker.sock` is mounted (the bot uses the Docker Python SDK, not the docker CLI)."
         )
     return "\n".join(lines)
 

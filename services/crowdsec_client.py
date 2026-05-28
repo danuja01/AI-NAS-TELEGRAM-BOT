@@ -1,5 +1,5 @@
 """
-CrowdSec read-only client: cscli via docker exec and optional LAPI HTTP.
+CrowdSec read-only client: cscli via Docker SDK exec (or docker CLI fallback) + optional LAPI HTTP.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ import logging
 import subprocess
 import urllib.error
 import urllib.request
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import config
 
@@ -23,25 +23,67 @@ _CSCLI_SUBCOMMANDS = {
 
 
 def crowdsec_available() -> bool:
-    """True if docker exec cscli appears reachable."""
+    """True if cscli in the CrowdSec container appears reachable."""
     ok, _ = crowdsec_probe()
     return ok
 
 
 def crowdsec_probe() -> Tuple[bool, str]:
     """Check cscli reachability; returns (ok, error_or_ok_message)."""
-    return _run_cscli(["version"], timeout=8)
+    ok, out = _run_cscli(["version"], timeout=8)
+    if ok:
+        first = (out or "").splitlines()[0][:120] if out else "ok"
+        return True, first
+    return False, out
 
 
 def _container_name() -> str:
     return (getattr(config, "CROWDSEC_CONTAINER", None) or "crowdsec").strip().lstrip("/")
 
 
-def _run_cscli(extra_argv: List[str], timeout: int = 25) -> Tuple[bool, str]:
-    name = _container_name()
-    if not name:
-        return False, "CROWDSEC_CONTAINER is empty"
-    cmd = ["docker", "exec", name, "cscli"] + extra_argv
+def _run_cscli_sdk(name: str, extra_argv: List[str]) -> Tuple[bool, str]:
+    """Run cscli inside a container using the Docker Python SDK (no host docker CLI required)."""
+    try:
+        from docker.errors import NotFound
+
+        from services.docker_service import get_docker_client
+
+        client = get_docker_client()
+        container = client.containers.get(name)
+        status = (container.status or "").lower()
+        if status != "running":
+            return False, f"container {name!r} is not running (status: {status})"
+
+        result = container.exec_run(["cscli", *extra_argv], demux=True)
+        exit_code = getattr(result, "exit_code", 1)
+        output = getattr(result, "output", None)
+        if isinstance(output, tuple):
+            stdout_b, stderr_b = output
+            stdout = (stdout_b or b"").decode("utf-8", errors="replace")
+            stderr = (stderr_b or b"").decode("utf-8", errors="replace")
+        elif isinstance(output, (bytes, bytearray)):
+            stdout = bytes(output).decode("utf-8", errors="replace")
+            stderr = ""
+        else:
+            stdout = str(output or "")
+            stderr = ""
+
+        if exit_code != 0:
+            err = (stderr or stdout or "cscli failed").strip()[:800]
+            return False, err
+        return True, stdout.strip()
+    except NotFound:
+        return False, f"container {name!r} not found"
+    except ImportError:
+        return False, "Docker SDK not installed"
+    except Exception as e:
+        logger.debug("CrowdSec SDK exec failed: %s", e)
+        return False, str(e)[:800]
+
+
+def _run_cscli_cli(name: str, extra_argv: List[str], timeout: int) -> Tuple[bool, str]:
+    """Fallback: host docker CLI subprocess."""
+    cmd = ["docker", "exec", name, "cscli", *extra_argv]
     try:
         proc = subprocess.run(
             cmd,
@@ -50,13 +92,32 @@ def _run_cscli(extra_argv: List[str], timeout: int = 25) -> Tuple[bool, str]:
             timeout=timeout,
         )
     except FileNotFoundError:
-        return False, "docker CLI not in PATH"
+        return False, "docker CLI not in PATH (bot image uses Docker SDK instead)"
     except subprocess.TimeoutExpired:
         return False, f"timeout running {' '.join(cmd[:6])}..."
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "cscli failed").strip()[:800]
         return False, err
     return True, (proc.stdout or "").strip()
+
+
+def _run_cscli(extra_argv: List[str], timeout: int = 25) -> Tuple[bool, str]:
+    name = _container_name()
+    if not name:
+        return False, "CROWDSEC_CONTAINER is empty"
+
+    ok, out = _run_cscli_sdk(name, extra_argv)
+    if ok:
+        return True, out
+
+    sdk_err = out
+    ok_cli, out_cli = _run_cscli_cli(name, extra_argv, timeout)
+    if ok_cli:
+        return True, out_cli
+
+    if "docker CLI not in PATH" in out_cli or "Docker SDK not installed" in sdk_err:
+        return False, sdk_err
+    return False, sdk_err or out_cli
 
 
 def _parse_json_list(raw: str) -> List[Dict[str, Any]]:
