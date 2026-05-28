@@ -9,6 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+import config
 from monitoring.uptime import store
 from services.docker_service import get_container_logs
 from utils.formatters import escape_telegram_html
@@ -21,7 +22,7 @@ from utils.telegram_reply import reply_text_chunked
 
 logger = logging.getLogger(__name__)
 
-_UPTIME_CB_PREFIXES = ("uack", "uackall", "usil", "ulog", "urst")
+_UPTIME_CB_PREFIXES = ("uack", "uackall", "usil", "ulog", "urst", "uai")
 
 
 def is_uptime_callback(data: str) -> bool:
@@ -56,6 +57,8 @@ async def handle_uptime_callback(update: Update, context: ContextTypes.DEFAULT_T
             await _handle_logs(update, query, data, user_id)
         elif action == "urst":
             await _handle_restart(query, context, data, user_id)
+        elif action == "uai":
+            await _handle_ai_assist(query, context, data, user_id)
         else:
             await query.answer()
     except Exception as e:
@@ -162,6 +165,63 @@ async def _handle_logs(update: Update, query, data: str, user_id: int) -> None:
     except Exception as e:
         if query.message:
             await query.message.reply_text(f"❌ Logs failed: {e}")
+
+
+async def _handle_ai_assist(query, context, data: str, user_id: int) -> None:
+    uid, payload = parse_callback_user_id(data, "uai")
+    if uid != user_id:
+        await _answer(query, "Not your button.")
+        return
+    try:
+        mid = int((payload or "").strip())
+    except ValueError:
+        await _answer(query, "Invalid monitor.")
+        return
+    if not query.message:
+        await _answer(query, "No message.")
+        return
+    if not config.OPENAI_API_KEY:
+        await _answer(query, "OpenAI API key not configured.", show_alert=True)
+        return
+
+    monitor = await store.get_monitor(mid)
+    if not monitor:
+        await _answer(query, "Monitor not found.", show_alert=True)
+        return
+
+    incident = await store.get_open_incident(mid)
+    error = (incident or {}).get("root_cause") or monitor.get("last_error") or "check failed"
+
+    await _answer(query, "Analyzing…")
+    status = await query.message.reply_text(
+        f"🤖 Generating AI analysis for <code>{escape_telegram_html(monitor.get('name', ''))}</code>…",
+        parse_mode=ParseMode.HTML,
+    )
+
+    from monitoring.uptime.diagnostics import diagnose_monitor_failure
+
+    summary = await diagnose_monitor_failure(monitor, error, on_demand=True)
+    try:
+        await status.delete()
+    except Exception:
+        pass
+
+    if not summary:
+        await query.message.reply_text(
+            "⚠️ Could not generate analysis (API error or empty response). Try again shortly.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    await store.update_incident_ai_summary(mid, summary)
+    from utils.telegram_reply import bot_send_ai_markdown
+
+    await bot_send_ai_markdown(
+        context.bot,
+        user_id,
+        summary,
+        title=f"AI assist — {monitor.get('name', 'monitor')}",
+    )
 
 
 async def _handle_restart(query, context, data: str, user_id: int) -> None:

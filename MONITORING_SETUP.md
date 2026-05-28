@@ -7,7 +7,7 @@ This guide covers everything to configure **before** (and when) you run the bot 
 | Requirement | Why |
 |-------------|-----|
 | `TELEGRAM_TOKEN` + `ALLOWED_USER_IDS` | Alerts are sent as Telegram DMs |
-| `OPENAI_API_KEY` | Optional; AI incident summaries (`UPTIME_AI_ON_INCIDENT`) |
+| `OPENAI_API_KEY` | Optional; enables **AI assist** button on DOWN alerts |
 | Docker socket mounted | Container monitors, image-update alerts, `/docker` |
 | `ping` in container/host | Ping monitors |
 | `tailscale` CLI (optional) | Built-in Tailscale monitor |
@@ -61,8 +61,9 @@ UPTIME_DOCKER_IMAGE_ALERTS=true
 UPTIME_AUTO_DISCOVER_DOCKER=true
 MONITOR_SYSTEMD_UNITS=docker,smbd,nginx
 
-# AI on new incidents (uses API credits)
-UPTIME_AI_ON_INCIDENT=true
+# AI on DOWN alerts: default off — tap "AI assist" on the alert (uses API credits)
+UPTIME_AI_ON_INCIDENT=false
+UPTIME_AI_BUTTON=true
 AUTOTROUBLESHOOT_ENABLED=false
 
 # Escalation: notify at 1st, 3rd, 10th consecutive failure
@@ -342,7 +343,8 @@ Install deps: `pip install fastapi uvicorn` (included in `requirements.txt`).
 | `/proc` process monitor empty | Use `pid: host` in compose |
 | Docker monitors empty | Mount `docker.sock` |
 | Too many alerts | `/monitor_silence`, `/monitor_pause`, `MONITOR_DOCKER_IGNORE` |
-| AI summary missing | `OPENAI_API_KEY` + `UPTIME_AI_ON_INCIDENT=true` |
+| AI assist button missing | `OPENAI_API_KEY` + `UPTIME_AI_BUTTON=true` (default) |
+| Auto AI on every DOWN | Set `UPTIME_AI_ON_INCIDENT=true` (default is **off**; use button instead) |
 
 ---
 
