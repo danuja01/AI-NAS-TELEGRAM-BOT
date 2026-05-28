@@ -24,8 +24,13 @@ _CSCLI_SUBCOMMANDS = {
 
 def crowdsec_available() -> bool:
     """True if docker exec cscli appears reachable."""
-    ok, _ = _run_cscli(["version"], timeout=8)
+    ok, _ = crowdsec_probe()
     return ok
+
+
+def crowdsec_probe() -> Tuple[bool, str]:
+    """Check cscli reachability; returns (ok, error_or_ok_message)."""
+    return _run_cscli(["version"], timeout=8)
 
 
 def _container_name() -> str:

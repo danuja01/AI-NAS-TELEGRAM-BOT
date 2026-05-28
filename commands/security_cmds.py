@@ -4,6 +4,7 @@ CrowdSec security commands: status snapshot and AI incident summaries.
 
 import json
 import logging
+import os
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -12,7 +13,7 @@ import config
 from ai.agent_telegram import AgentTelegramBindings
 from ai.gpt_client import generate, generate_with_tools_loop
 from ai.security_assistant import crowdsec_security_system_prompt
-from services.crowdsec_client import crowdsec_available, gather_crowdsec_snapshot
+from services.crowdsec_client import crowdsec_available, crowdsec_probe, gather_crowdsec_snapshot
 from utils.security import require_auth, rate_limit
 from utils.formatters import format_error
 from utils.telegram_reply import reply_ai_markdown_chunked
@@ -48,14 +49,40 @@ def _format_status_text(snap: dict) -> str:
     return "\n".join(lines)
 
 
+def _crowdsec_disabled_hint() -> str:
+    """Explain why /crowdsec may refuse to run (config vs Docker/cscli)."""
+    lines = []
+    raw = os.getenv("CROWDSEC_MONITOR_ENABLED")
+    if not config.CROWDSEC_MONITOR_ENABLED:
+        lines.append(
+            "• `CROWDSEC_MONITOR_ENABLED` is **off inside the running bot** "
+            f"(process env: {raw!r})."
+        )
+        lines.append(
+            "  On Docker: setting `.env` alone is not enough — the variable must be listed under "
+            "`environment:` in `docker-compose.yml` (or use `env_file: .env`), then recreate:"
+        )
+        lines.append("  `docker compose up -d --force-recreate`")
+    ok, probe_msg = crowdsec_probe()
+    if not ok:
+        lines.append(
+            f"• `docker exec {config.CROWDSEC_CONTAINER} cscli` failed: {probe_msg}"
+        )
+        lines.append(
+            "  Check container name (`CROWDSEC_CONTAINER`), that CrowdSec is running, "
+            "and that `/var/run/docker.sock` is mounted in the bot container."
+        )
+    return "\n".join(lines)
+
+
 @require_auth
 @rate_limit
 async def crowdsec_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show CrowdSec alerts/decisions snapshot."""
     if not config.CROWDSEC_MONITOR_ENABLED and not crowdsec_available():
         await update.message.reply_text(
-            "CrowdSec monitoring is disabled. Set `CROWDSEC_MONITOR_ENABLED=true` in `.env` "
-            "and ensure the `crowdsec` container is running.",
+            "CrowdSec is not available from the bot.\n\n" + _crowdsec_disabled_hint(),
+            parse_mode="Markdown",
         )
         return
 
@@ -87,7 +114,8 @@ async def security_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not config.CROWDSEC_MONITOR_ENABLED and not crowdsec_available():
         await update.message.reply_text(
-            "CrowdSec is not available. Enable `CROWDSEC_MONITOR_ENABLED` and verify the crowdsec container.",
+            "CrowdSec is not available from the bot.\n\n" + _crowdsec_disabled_hint(),
+            parse_mode="Markdown",
         )
         return
 
