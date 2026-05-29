@@ -362,6 +362,70 @@ async def monitor_images_command(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text("No image changes detected.")
 
 
+@require_auth
+@rate_limit
+async def monitor_dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Control uptime web dashboard (Tailscale): on | off | link | status."""
+    from monitoring.uptime import dashboard_control, dashboard_settings
+    from telegram.constants import ParseMode
+
+    args = [a.lower() for a in (context.args or [])]
+    if not args:
+        text = await dashboard_control.dashboard_status_text()
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        return
+
+    action = args[0]
+    if action in ("on", "enable", "start"):
+        ok, msg = await dashboard_control.enable_dashboard_via_bot()
+        if not ok:
+            await update.message.reply_text(f"❌ {escape_telegram_html(msg)}", parse_mode=ParseMode.HTML)
+            return
+        link = await dashboard_settings.format_dashboard_link_message()
+        await update.message.reply_text(
+            f"✅ {escape_telegram_html(msg)}\n\n{link}",
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=False,
+        )
+        return
+
+    if action in ("off", "disable", "stop"):
+        msg = await dashboard_control.disable_dashboard_via_bot()
+        await update.message.reply_text(f"✅ {escape_telegram_html(msg)}", parse_mode=ParseMode.HTML)
+        return
+
+    if action in ("link", "url"):
+        if not await dashboard_settings.is_runtime_enabled():
+            await update.message.reply_text(
+                "Dashboard is off. Use <code>/monitor_dashboard on</code> first.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        from monitoring.uptime.dashboard import is_dashboard_server_running
+
+        if not is_dashboard_server_running():
+            ok, _ = await dashboard_control.enable_dashboard_via_bot()
+            if not ok:
+                await update.message.reply_text(
+                    "❌ Dashboard server is not running.",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+        link = await dashboard_settings.format_dashboard_link_message()
+        await update.message.reply_text(link, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
+        return
+
+    if action in ("status", "info"):
+        text = await dashboard_control.dashboard_status_text()
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        return
+
+    await update.message.reply_text(
+        "Usage: <code>/monitor_dashboard on|off|link|status</code>",
+        parse_mode=ParseMode.HTML,
+    )
+
+
 async def handle_monitor_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle uptime alert inline buttons (delegates to monitoring.uptime.callbacks)."""
     from monitoring.uptime.callbacks import handle_uptime_callback
