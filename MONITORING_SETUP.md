@@ -295,21 +295,31 @@ Works in container with `pid: host` or on bare metal.
 
 ---
 
-## 9. Optional web dashboard
+## 9. Optional web dashboard (Tailscale)
+
+**Telegram (recommended):**
+
+```
+/monitor_dashboard on     — start + send link
+/monitor_dashboard link   — resend link
+/monitor_dashboard off    — disable
+/monitor_dashboard status — show state
+```
+
+The bot reminds you to **connect to Tailscale** before opening the link.
 
 ```env
-UPTIME_DASHBOARD_ENABLED=true
-UPTIME_DASHBOARD_BIND=127.0.0.1
+UPTIME_DASHBOARD_PUBLIC_HOST=100.75.87.91
 UPTIME_DASHBOARD_PORT=18766
-UPTIME_DASHBOARD_SECRET=your-secret
+UPTIME_DASHBOARD_LISTEN=0.0.0.0
+UPTIME_DASHBOARD_SECRET=your-long-random-secret
 ```
 
-Access (SSH tunnel):
+Link format: `http://100.75.87.91:18766/?secret=...` (secret in URL for browser + WebSocket).
 
-```bash
-ssh -L 18766:127.0.0.1:18766 user@nas
-# Browser: http://127.0.0.1:18766/  Header: X-Dashboard-Secret: your-secret
-```
+After enabling, publish port **18766** in `docker-compose` and `docker compose up -d --force-recreate`.
+
+Optional auto-start on boot: `UPTIME_DASHBOARD_ENABLED=true`.
 
 Install deps: `pip install fastapi uvicorn` (included in `requirements.txt`).
 

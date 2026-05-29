@@ -86,6 +86,7 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("monitor_report", "Weekly uptime report"),
     BotCommand("monitor_stats", "MTBF/MTTR and latency graph"),
     BotCommand("monitor_groups", "List monitor groups"),
+    BotCommand("monitor_dashboard", "Uptime web dashboard (Tailscale)"),
     BotCommand("docker", "Docker dashboard"),
     BotCommand("containers", "Container list (compact)"),
     BotCommand("dscan", "Docker storage scan"),
@@ -241,6 +242,7 @@ def main():
     application.add_handler(CommandHandler("monitor_groups", monitor_cmds.monitor_groups_command))
     application.add_handler(CommandHandler("monitor_tag", monitor_cmds.monitor_tag_command))
     application.add_handler(CommandHandler("monitor_images", monitor_cmds.monitor_images_command))
+    application.add_handler(CommandHandler("monitor_dashboard", monitor_cmds.monitor_dashboard_command))
     # Register command handlers - Docker lifecycle
     application.add_handler(CommandHandler("docker", docker_cmds.docker_command))
     application.add_handler(CommandHandler("containers", docker_cmds.containers_command))

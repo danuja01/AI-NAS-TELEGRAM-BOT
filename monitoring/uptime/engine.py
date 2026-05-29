@@ -35,13 +35,14 @@ async def start_uptime_monitoring(bot: Bot) -> None:
             await sync_docker_monitors()
         except Exception as e:
             logger.warning("Docker monitor sync: %s", e)
-    if config.UPTIME_DASHBOARD_ENABLED:
-        try:
-            from monitoring.uptime.dashboard import start_dashboard
+    try:
+        from monitoring.uptime.dashboard_settings import is_runtime_enabled
+        from monitoring.uptime.dashboard_control import ensure_dashboard_server
 
-            start_dashboard()
-        except Exception as e:
-            logger.warning("Dashboard start failed: %s", e)
+        if await is_runtime_enabled():
+            await ensure_dashboard_server()
+    except Exception as e:
+        logger.warning("Dashboard start failed: %s", e)
     _engine_task = asyncio.create_task(_engine_loop(), name="uptime-engine")
     logger.info("Uptime monitoring engine started (tick=%ss)", config.UPTIME_TICK_SECONDS)
 

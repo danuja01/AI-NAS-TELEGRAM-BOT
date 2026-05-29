@@ -37,6 +37,7 @@ HELP_SECTION_BODIES: dict[str, str] = {
         "<code>/monitor_discover</code> — Auto-create monitors for running containers\n"
         "<code>/monitor_report</code> — Weekly uptime & incident summary\n"
         "<code>/monitor_stats</code> — MTBF/MTTR + latency sparkline for one monitor\n"
+        "<code>/monitor_dashboard</code> — Enable/disable uptime web UI (Tailscale link)\n"
         "<code>/monitor_groups</code> — Monitor groups · <code>/monitor_tag</code> tags\n"
         "<code>/monitor_images</code> — Scan Docker image updates\n"
         "<code>/alerts</code> — Unacknowledged alerts · <code>/alert_ack all</code> or <code>/alert_ack &lt;id&gt;</code>\n"
