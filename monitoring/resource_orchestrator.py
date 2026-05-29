@@ -1,15 +1,15 @@
 """
 Resource-aware container orchestrator: pause/stop low-priority workloads under pressure,
-restore when resources recover. Integrated with Telegram alerts.
+protect dynamically detected heavy containers, restore when resources recover.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 import psutil
 from telegram import Bot
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class WorkloadDetector(Protocol):
-    """Future hook: register workload-specific pressure detectors (Tdarr, Jellyfin, GPU)."""
+    """Future hook: register extra workload detectors (GPU, host process, etc.)."""
 
     def workload_name(self) -> str:
         ...
@@ -38,25 +38,13 @@ class WorkloadDetector(Protocol):
 class ResourceSnapshot:
     ram_percent: float
     cpu_percent: float
-    immich_ml_cpu: float
-    immich_ml_memory: float
+    heavy_containers: frozenset[str]
+    container_usages: Tuple[ros.ContainerUsage, ...]
     collected_at: datetime
 
     @property
-    def immich_ml_pressure(self) -> bool:
-        return self.immich_ml_cpu >= config.RESOURCE_IMMICH_ML_CPU_BOOST_PERCENT
-
-    @property
-    def immich_driven_pressure(self) -> bool:
-        """High load attributed to Immich ML — skip pausing/stopping the Immich stack."""
-        if not config.RESOURCE_PROTECT_IMMICH_STACK_UNDER_PRESSURE:
-            return False
-        if self.immich_ml_pressure:
-            return True
-        min_mb = config.RESOURCE_IMMICH_ML_RAM_PRESSURE_MB
-        if min_mb > 0 and self.immich_ml_memory >= min_mb * 1024 * 1024:
-            return True
-        return False
+    def has_heavy_workloads(self) -> bool:
+        return bool(self.heavy_containers)
 
 
 @dataclass
@@ -65,6 +53,7 @@ class MitigationResult:
     stopped: List[str]
     cause: str
     stage: int
+    protected: List[str] = field(default_factory=list)
 
 
 def _parse_iso(ts: str) -> Optional[datetime]:
@@ -82,12 +71,17 @@ def _parse_iso(ts: str) -> Optional[datetime]:
 def collect_snapshot() -> ResourceSnapshot:
     ram = float(psutil.virtual_memory().percent)
     cpu = float(psutil.cpu_percent(interval=0.5))
-    ml = ros.get_immich_ml_stats()
+    usages = ros.collect_running_container_usage()
+    heavy = ros.detect_heavy_containers(
+        usages,
+        system_ram_percent=ram,
+        system_cpu_percent=cpu,
+    )
     return ResourceSnapshot(
         ram_percent=ram,
         cpu_percent=cpu,
-        immich_ml_cpu=ml["cpu_percent"],
-        immich_ml_memory=ml["memory_bytes"],
+        heavy_containers=heavy,
+        container_usages=tuple(usages),
         collected_at=datetime.now(timezone.utc),
     )
 
@@ -97,7 +91,7 @@ def should_enter_mitigation(snap: ResourceSnapshot) -> bool:
     cpu_hi = config.RESOURCE_CPU_HIGH_PERCENT
     if snap.ram_percent >= ram_hi or snap.cpu_percent >= cpu_hi:
         return True
-    if snap.immich_ml_pressure and (
+    if snap.has_heavy_workloads and (
         snap.ram_percent >= ram_hi - 10 or snap.cpu_percent >= cpu_hi - 10
     ):
         return True
@@ -119,20 +113,27 @@ def recovery_conditions_met(snap: ResourceSnapshot) -> bool:
 
 
 def should_skip_mitigation(logical: str, snap: ResourceSnapshot) -> bool:
-    """Skip pause/stop for Immich stack when Immich ML is driving pressure."""
-    if not snap.immich_driven_pressure:
+    """Skip pause/stop for containers currently using significant RAM/CPU."""
+    if ros.is_critical(logical):
+        return True
+    if not config.RESOURCE_PROTECT_HEAVY_CONTAINERS:
         return False
-    return ros.is_immich_protected_container(logical)
+    return ros.normalize_container_name(logical) in snap.heavy_containers
 
 
 def mitigation_cause(snap: ResourceSnapshot) -> str:
-    if snap.immich_ml_pressure:
-        return ros.IMMICH_ML_CONTAINER
+    if snap.heavy_containers:
+        names = sorted(snap.heavy_containers)[:5]
+        return ", ".join(names)
     if snap.ram_percent >= config.RESOURCE_RAM_HIGH_PERCENT:
         return "high_memory"
     if snap.cpu_percent >= config.RESOURCE_CPU_HIGH_PERCENT:
         return "high_cpu"
     return "resource_pressure"
+
+
+def _protected_names(snap: ResourceSnapshot) -> List[str]:
+    return sorted(snap.heavy_containers)
 
 
 class ResourceOrchestrator:
@@ -169,6 +170,21 @@ class ResourceOrchestrator:
             mode = "mitigating"
         elif state.paused_by_orchestrator or state.stopped_by_orchestrator:
             mode = "awaiting_recovery"
+        by_name = {u.name: u for u in snap.container_usages}
+        heavy_detail = []
+        for name in sorted(snap.heavy_containers):
+            u = by_name.get(name)
+            if u:
+                heavy_detail.append(
+                    {
+                        "name": name,
+                        "cpu_percent": u.cpu_percent,
+                        "memory_mb": round(u.memory_bytes / (1024 * 1024), 1),
+                        "ram_percent": u.memory_percent_of_system,
+                    }
+                )
+            else:
+                heavy_detail.append({"name": name})
         return {
             "enabled": state.enabled,
             "mode": mode,
@@ -178,10 +194,8 @@ class ResourceOrchestrator:
             "last_recovery": state.last_recovery,
             "ram_percent": round(snap.ram_percent, 1),
             "cpu_percent": round(snap.cpu_percent, 1),
-            "immich_ml_cpu": round(snap.immich_ml_cpu, 1),
-            "immich_protection_active": snap.immich_driven_pressure,
-            "protect_immich_stack": config.RESOURCE_PROTECT_IMMICH_STACK_UNDER_PRESSURE,
-            "immich_protected_names": list(config.RESOURCE_IMMICH_PROTECT_CONTAINERS),
+            "protect_heavy_containers": config.RESOURCE_PROTECT_HEAVY_CONTAINERS,
+            "heavy_workloads": heavy_detail,
             "pause_candidates": list(ros.pause_containers()),
             "stop_candidates": list(ros.stop_containers()),
             "thresholds": {
@@ -190,6 +204,9 @@ class ResourceOrchestrator:
                 "cpu_high": config.RESOURCE_CPU_HIGH_PERCENT,
                 "cpu_recover": config.RESOURCE_CPU_RECOVER_PERCENT,
                 "recovery_delay_minutes": config.RESOURCE_RECOVERY_DELAY_MINUTES,
+                "heavy_ram_percent": config.RESOURCE_HEAVY_RAM_PERCENT,
+                "heavy_cpu_percent": config.RESOURCE_HEAVY_CPU_PERCENT,
+                "heavy_min_memory_mb": config.RESOURCE_HEAVY_MIN_MEMORY_MB,
             },
         }
 
@@ -198,13 +215,14 @@ class ResourceOrchestrator:
         statuses = ros.list_known_statuses()
         docker_names = set(statuses.keys())
         paused: List[str] = []
+        protected = _protected_names(snap)
 
         for logical in ros.pause_containers():
             if logical in state.paused_by_orchestrator:
                 continue
             if should_skip_mitigation(logical, snap):
                 logger.info(
-                    "Stage1 skip %s: Immich-driven pressure (protect Immich stack)",
+                    "Stage1 skip %s: heavy workload (protected)",
                     logical,
                 )
                 continue
@@ -217,7 +235,6 @@ class ResourceOrchestrator:
         state.mitigation_active = True
         state.stage1_at = ros.utc_now_iso()
         state.recovery_stable_since = ""
-        # always record trigger
         state.last_trigger = state.stage1_at
         self._save_state(state)
 
@@ -226,6 +243,7 @@ class ResourceOrchestrator:
             stopped=[],
             cause=mitigation_cause(snap),
             stage=1,
+            protected=protected,
         )
 
     def run_stage2(self, snap: ResourceSnapshot) -> MitigationResult:
@@ -233,13 +251,14 @@ class ResourceOrchestrator:
         statuses = ros.list_known_statuses()
         docker_names = set(statuses.keys())
         stopped: List[str] = []
+        protected = _protected_names(snap)
 
         for logical in ros.stop_containers():
             if logical in state.stopped_by_orchestrator:
                 continue
             if should_skip_mitigation(logical, snap):
                 logger.info(
-                    "Stage2 skip %s: Immich-driven pressure (protect Immich stack)",
+                    "Stage2 skip %s: heavy workload (protected)",
                     logical,
                 )
                 continue
@@ -255,6 +274,7 @@ class ResourceOrchestrator:
             stopped=stopped,
             cause=mitigation_cause(snap),
             stage=2,
+            protected=protected,
         )
 
     async def restore_all(self, snap: ResourceSnapshot) -> List[str]:
@@ -360,7 +380,7 @@ class ResourceOrchestrator:
         if bot:
             await _notify_stage1(bot, snap, r1)
         snap2 = self._collect_snapshot()
-        r2 = MitigationResult(paused=[], stopped=[], cause=r1.cause, stage=1)
+        r2 = MitigationResult(paused=[], stopped=[], cause=r1.cause, stage=1, protected=r1.protected)
         if should_escalate_stage2(snap2):
             r2 = self.run_stage2(snap2)
             if bot:
@@ -370,6 +390,7 @@ class ResourceOrchestrator:
             stopped=r2.stopped,
             cause=r1.cause,
             stage=2 if r2.stopped else 1,
+            protected=r2.protected or r1.protected,
         )
 
     async def restore_now(self, bot: Optional[Bot] = None) -> List[str]:
@@ -398,6 +419,15 @@ async def resource_orchestrator_tick(bot: Bot) -> None:
         await get_orchestrator().tick(bot)
     except Exception as e:
         logger.error("Resource orchestrator tick failed: %s", e, exc_info=True)
+
+
+def _format_protected_block(result: MitigationResult) -> List[str]:
+    if not result.protected:
+        return []
+    lines = ["", "Protected (heavy workloads):"]
+    for name in result.protected:
+        lines.append(f"- {name}")
+    return lines
 
 
 async def _broadcast(bot: Bot, text: str, *, source: str) -> None:
@@ -430,9 +460,9 @@ async def _notify_stage1(bot: Bot, snap: ResourceSnapshot, result: MitigationRes
         "",
         "Cause:",
         result.cause,
-        "",
-        "Paused:",
     ]
+    lines.extend(_format_protected_block(result))
+    lines.extend(["", "Paused:"])
     for name in result.paused:
         lines.append(f"- {name}")
     if not result.paused:
@@ -447,8 +477,11 @@ async def _notify_stage2(bot: Bot, snap: ResourceSnapshot, result: MitigationRes
         f"RAM: {snap.ram_percent:.0f}%",
         f"CPU: {snap.cpu_percent:.0f}%",
         "",
-        "Stopped:",
+        "Cause:",
+        result.cause,
     ]
+    lines.extend(_format_protected_block(result))
+    lines.extend(["", "Stopped:"])
     for name in result.stopped:
         lines.append(f"- {name}")
     if not result.stopped:

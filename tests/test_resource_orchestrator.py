@@ -8,15 +8,24 @@ from monitoring.resource_orchestrator import (
     recovery_conditions_met,
     should_enter_mitigation,
     should_escalate_stage2,
+    should_skip_mitigation,
+)
+from services.resource_orchestrator_service import (
+    ContainerUsage,
+    detect_heavy_containers,
 )
 
 
-def _snap(ram: float, cpu: float, ml_cpu: float = 0.0) -> ResourceSnapshot:
+def _snap(
+    ram: float,
+    cpu: float,
+    heavy: frozenset[str] | None = None,
+) -> ResourceSnapshot:
     return ResourceSnapshot(
         ram_percent=ram,
         cpu_percent=cpu,
-        immich_ml_cpu=ml_cpu,
-        immich_ml_memory=0.0,
+        heavy_containers=heavy or frozenset(),
+        container_usages=(),
         collected_at=datetime.now(timezone.utc),
     )
 
@@ -30,10 +39,9 @@ def test_should_enter_mitigation_cpu():
     assert should_enter_mitigation(_snap(50, 90)) is True
 
 
-def test_should_enter_mitigation_immich_boost():
+def test_should_enter_mitigation_heavy_workload_boost():
     hi = config.RESOURCE_RAM_HIGH_PERCENT
-    boost = config.RESOURCE_IMMICH_ML_CPU_BOOST_PERCENT
-    assert should_enter_mitigation(_snap(hi - 5, 50, ml_cpu=boost)) is True
+    assert should_enter_mitigation(_snap(hi - 5, 50, heavy=frozenset({"tdarr"}))) is True
 
 
 def test_should_escalate_stage2():
@@ -48,23 +56,22 @@ def test_recovery_conditions():
 
 
 def test_parse_container_lists_from_config():
-    import config
     assert "affine" in config.RESOURCE_PAUSE_CONTAINERS
     assert "jellyfin" in config.RESOURCE_STOP_CONTAINERS
-    assert "immich" in config.RESOURCE_CRITICAL_CONTAINERS
-    assert "immich" not in config.RESOURCE_PAUSE_CONTAINERS
+    assert "tailscale" in config.RESOURCE_CRITICAL_CONTAINERS
 
 
-def test_should_skip_immich_under_ml_pressure():
-    from datetime import datetime, timezone
-    from monitoring.resource_orchestrator import ResourceSnapshot, should_skip_mitigation
-    snap = ResourceSnapshot(
-        ram_percent=90,
-        cpu_percent=50,
-        immich_ml_cpu=60,
-        immich_ml_memory=500 * 1024 * 1024,
-        collected_at=datetime.now(timezone.utc),
-    )
-    assert snap.immich_driven_pressure is True
-    assert should_skip_mitigation("immich", snap) is True
+def test_should_skip_heavy_container():
+    snap = _snap(90, 50, heavy=frozenset({"immich_machine_learning", "tdarr"}))
+    assert should_skip_mitigation("immich_machine_learning", snap) is True
     assert should_skip_mitigation("jellyfin", snap) is False
+
+
+def test_detect_heavy_containers_by_ram():
+    usages = [
+        ContainerUsage("immich_machine_learning", 30.0, 900 * 1024 * 1024, 11.0),
+        ContainerUsage("jellyfin", 2.0, 100 * 1024 * 1024, 1.2),
+    ]
+    heavy = detect_heavy_containers(usages, system_ram_percent=88, system_cpu_percent=40)
+    assert "immich_machine_learning" in heavy
+    assert "jellyfin" not in heavy

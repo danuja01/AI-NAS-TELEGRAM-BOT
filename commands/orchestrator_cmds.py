@@ -35,8 +35,8 @@ async def orchestrator_command(update: Update, context: ContextTypes.DEFAULT_TYP
     th = status["thresholds"]
     pause_cfg = status.get("pause_candidates") or []
     stop_cfg = status.get("stop_candidates") or []
-    immich_prot = status.get("protect_immich_stack")
-    immich_active = status.get("immich_protection_active")
+    heavy = status.get("heavy_workloads") or []
+    protect_heavy = status.get("protect_heavy_containers")
     lines = [
         "<b>Resource Orchestrator</b>",
         "",
@@ -44,11 +44,29 @@ async def orchestrator_command(update: Update, context: ContextTypes.DEFAULT_TYP
         f"<b>Current state</b>: <code>{status['mode']}</code>",
         f"<b>RAM / CPU now</b>: <code>{status['ram_percent']}%</code> / "
         f"<code>{status['cpu_percent']}%</code>",
-        f"<b>Immich ML CPU</b>: <code>{status['immich_ml_cpu']}%</code>",
-        f"<b>Protect Immich stack</b>: {"on" if immich_prot else "off"} + ("" if not immich_active else " (active — Immich names skipped)")",
+        f"<b>Protect heavy workloads</b>: {'yes' if protect_heavy else 'no'}",
         "",
-        "<b>Paused containers</b>:",
+        "<b>Heavy workloads now</b> (auto-protected from pause/stop):",
     ]
+    if heavy:
+        for row in heavy:
+            name = row.get("name", "?")
+            mem = row.get("memory_mb")
+            cpu = row.get("cpu_percent")
+            ram_pct = row.get("ram_percent")
+            if mem is not None:
+                lines.append(
+                    f"  • <code>{name}</code> — "
+                    f"<code>{mem:.0f} MB</code> RAM "
+                    f"(<code>{ram_pct}%</code> of host), "
+                    f"CPU <code>{cpu}%</code>"
+                )
+            else:
+                lines.append(f"  • <code>{name}</code>")
+    else:
+        lines.append("  (none detected)")
+    lines.append("")
+    lines.append("<b>Paused containers</b>:")
     if status["paused"]:
         for name in status["paused"]:
             lines.append(f"  • <code>{name}</code>")
@@ -73,6 +91,11 @@ async def orchestrator_command(update: Update, context: ContextTypes.DEFAULT_TYP
     lines.append(
         f"  CPU high / recover: <code>{th['cpu_high']}%</code> / "
         f"<code>{th['cpu_recover']}%</code>"
+    )
+    lines.append(
+        f"  Heavy: RAM ≥ <code>{th['heavy_ram_percent']}%</code> of host or "
+        f"CPU ≥ <code>{th['heavy_cpu_percent']}%</code> "
+        f"(min <code>{th['heavy_min_memory_mb']}</code> MB)"
     )
     lines.append(
         f"  Recovery delay: <code>{th['recovery_delay_minutes']}</code> min"
@@ -130,6 +153,7 @@ async def mitigate_now_command(update: Update, context: ContextTypes.DEFAULT_TYP
     result = await orch.mitigate_now(context.bot)
     summary = (
         f"Mitigation complete (stage {result.stage}).\n"
+        f"Protected: {', '.join(result.protected) or 'none'}\n"
         f"Paused: {', '.join(result.paused) or 'none'}\n"
         f"Stopped: {', '.join(result.stopped) or 'none'}"
     )

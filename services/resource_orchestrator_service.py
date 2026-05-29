@@ -1,5 +1,5 @@
 """
-Docker operations and persistent state for the Resource Orchestrator.
+Docker operations, workload detection, and persistent state for the Resource Orchestrator.
 """
 
 from __future__ import annotations
@@ -9,14 +9,14 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+import psutil
 
 import config
 from services import docker_service
 
 logger = logging.getLogger(__name__)
-
-IMMICH_ML_CONTAINER = "immich_machine_learning"
 
 
 def critical_containers() -> frozenset[str]:
@@ -39,19 +39,14 @@ def is_critical(name: str) -> bool:
     return normalize_container_name(name) in critical_containers()
 
 
-def immich_protect_containers() -> frozenset[str]:
-    return frozenset(config.RESOURCE_IMMICH_PROTECT_CONTAINERS)
+@dataclass(frozen=True)
+class ContainerUsage:
+    """Per-container resource usage from Docker stats."""
 
-
-def is_immich_protected_container(name: str) -> bool:
-    """True if this container is part of the Immich stack (protected under Immich-driven pressure)."""
-    key = normalize_container_name(name)
-    if key in immich_protect_containers():
-        return True
-    prefix = (getattr(config, "RESOURCE_IMMICH_PROTECT_PREFIX", "") or "").strip().lower()
-    if prefix and key.startswith(prefix):
-        return True
-    return False
+    name: str
+    cpu_percent: float
+    memory_bytes: int
+    memory_percent_of_system: float
 
 
 @dataclass
@@ -117,8 +112,7 @@ def load_state() -> OrchestratorPersistedState:
         )
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        state = OrchestratorPersistedState.from_dict(raw if isinstance(raw, dict) else {})
-        return state
+        return OrchestratorPersistedState.from_dict(raw if isinstance(raw, dict) else {})
     except Exception as e:
         logger.error("Failed to load orchestrator state from %s: %s", path, e)
         return OrchestratorPersistedState(
@@ -139,6 +133,86 @@ def save_state(state: OrchestratorPersistedState) -> None:
     except Exception as e:
         logger.error("Failed to save orchestrator state to %s: %s", path, e)
         raise
+
+
+def collect_running_container_usage() -> List[ContainerUsage]:
+    """Docker stats for all running containers (name, CPU %, RAM vs system)."""
+    if not docker_service.DOCKER_AVAILABLE:
+        return []
+    total_ram = psutil.virtual_memory().total
+    usages: List[ContainerUsage] = []
+    try:
+        client = docker_service.get_docker_client()
+        for container in client.containers.list():
+            if (container.status or "").lower() != "running":
+                continue
+            try:
+                stats = container.stats(stream=False)
+                mem = int(stats.get("memory_stats", {}).get("usage") or 0)
+                cpu = float(docker_service.calculate_cpu_percent(stats))
+                name = normalize_container_name(container.name)
+                if not name:
+                    continue
+                mem_pct = (mem / total_ram * 100.0) if total_ram > 0 else 0.0
+                usages.append(
+                    ContainerUsage(
+                        name=name,
+                        cpu_percent=round(cpu, 2),
+                        memory_bytes=mem,
+                        memory_percent_of_system=round(mem_pct, 2),
+                    )
+                )
+            except Exception as e:
+                logger.debug("stats for %s: %s", container.name, e)
+    except Exception as e:
+        logger.warning("collect_running_container_usage: %s", e)
+    return usages
+
+
+def detect_heavy_containers(
+    usages: List[ContainerUsage],
+    *,
+    system_ram_percent: float,
+    system_cpu_percent: float,
+) -> frozenset[str]:
+    """
+    Containers driving pressure — skipped for pause/stop so they can keep working.
+
+    Uses live Docker memory/CPU. Under RAM pressure, also protects top memory consumers.
+    """
+    if not config.RESOURCE_PROTECT_HEAVY_CONTAINERS or not usages:
+        return frozenset()
+
+    min_bytes = config.RESOURCE_HEAVY_MIN_MEMORY_MB * 1024 * 1024
+    ram_hi = config.RESOURCE_RAM_HIGH_PERCENT
+    system_ram_stressed = system_ram_percent >= ram_hi - 5
+
+    eligible = [
+        u
+        for u in usages
+        if not is_critical(u.name) and u.memory_bytes >= min_bytes
+    ]
+    eligible.sort(key=lambda u: u.memory_bytes, reverse=True)
+
+    heavy: Dict[str, int] = {}
+
+    for u in eligible:
+        if u.memory_percent_of_system >= config.RESOURCE_HEAVY_RAM_PERCENT:
+            heavy[u.name] = u.memory_bytes
+        elif u.cpu_percent >= config.RESOURCE_HEAVY_CPU_PERCENT:
+            heavy[u.name] = u.memory_bytes
+
+    if system_ram_stressed:
+        for u in eligible[: config.RESOURCE_HEAVY_MAX_PROTECT]:
+            heavy[u.name] = u.memory_bytes
+    elif system_cpu_percent >= config.RESOURCE_CPU_HIGH_PERCENT - 5:
+        by_cpu = sorted(eligible, key=lambda u: u.cpu_percent, reverse=True)
+        for u in by_cpu[: config.RESOURCE_HEAVY_MAX_PROTECT]:
+            if u.cpu_percent >= config.RESOURCE_HEAVY_CPU_PERCENT * 0.5:
+                heavy[u.name] = u.memory_bytes
+
+    ranked = sorted(heavy.items(), key=lambda item: item[1], reverse=True)
+    return frozenset(name for name, _ in ranked[: config.RESOURCE_HEAVY_MAX_PROTECT])
 
 
 def list_known_statuses() -> Dict[str, str]:
@@ -165,28 +239,8 @@ def resolve_container_name(candidates: Set[str], logical_name: str) -> Optional[
     return key if key in candidates else None
 
 
-def get_immich_ml_stats() -> Dict[str, float]:
-    """CPU % and memory bytes for immich_machine_learning, or zeros if unavailable."""
-    if not docker_service.DOCKER_AVAILABLE:
-        return {"cpu_percent": 0.0, "memory_bytes": 0.0}
-    try:
-        summary = docker_service.get_container_stats_summary(IMMICH_ML_CONTAINER)
-        if summary.get("error") or not summary.get("running"):
-            return {"cpu_percent": 0.0, "memory_bytes": 0.0}
-        return {
-            "cpu_percent": float(summary.get("cpu_percent") or 0.0),
-            "memory_bytes": float(summary.get("memory_usage") or 0.0),
-        }
-    except Exception as e:
-        logger.debug("immich ML stats unavailable: %s", e)
-        return {"cpu_percent": 0.0, "memory_bytes": 0.0}
-
-
 def safe_pause(name: str, statuses: Dict[str, str]) -> bool:
-    """
-    Pause only if running and not critical. Returns True if paused by this call.
-    Skips if already paused/exited (user may have stopped manually).
-    """
+    """Pause only if running and not critical."""
     key = normalize_container_name(name)
     if is_critical(key):
         logger.warning("Refusing to pause critical container %s", name)

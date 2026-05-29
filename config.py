@@ -290,7 +290,6 @@ RESOURCE_RECOVERY_DELAY_MINUTES = max(1, int(os.getenv("RESOURCE_RECOVERY_DELAY_
 RESOURCE_CHECK_INTERVAL_SECONDS = max(10, int(os.getenv("RESOURCE_CHECK_INTERVAL_SECONDS", "30")))
 RESOURCE_STAGE2_DELAY_SECONDS = max(30, int(os.getenv("RESOURCE_STAGE2_DELAY_SECONDS", "60")))
 RESOURCE_RESTORE_GAP_SECONDS = max(1, int(os.getenv("RESOURCE_RESTORE_GAP_SECONDS", "10")))
-RESOURCE_IMMICH_ML_CPU_BOOST_PERCENT = float(os.getenv("RESOURCE_IMMICH_ML_CPU_BOOST_PERCENT", "50"))
 RESOURCE_ORCHESTRATOR_STATE_PATH = os.getenv(
     "RESOURCE_ORCHESTRATOR_STATE_PATH",
     str(DATA_DIR / "resource_orchestrator_state.json"),
@@ -311,9 +310,6 @@ def _parse_container_name_list(env_var: str, default_csv: str) -> tuple[str, ...
 
 
 _DEFAULT_RESOURCE_CRITICAL = "tailscale,cloudflared,adguardhome,nas-telegram-bot"
-_DEFAULT_RESOURCE_IMMICH_PROTECT = (
-    "immich,immich_postgres,immich_redis,immich_machine_learning"
-)
 _DEFAULT_RESOURCE_PAUSE = "affine,homarr,filebrowser"
 _DEFAULT_RESOURCE_STOP = (
     "jellyfin,sonarr,radarr,prowlarr,bazarr,jellyseerr,qbittorrent,flaresolverr"
@@ -327,18 +323,11 @@ _stop_raw = _parse_container_name_list("RESOURCE_STOP_CONTAINERS", _DEFAULT_RESO
 RESOURCE_PAUSE_CONTAINERS = tuple(n for n in _pause_raw if n not in RESOURCE_CRITICAL_CONTAINERS)
 RESOURCE_STOP_CONTAINERS = tuple(n for n in _stop_raw if n not in RESOURCE_CRITICAL_CONTAINERS)
 
-RESOURCE_PROTECT_IMMICH_STACK_UNDER_PRESSURE = _env_bool(
-    "RESOURCE_PROTECT_IMMICH_STACK_UNDER_PRESSURE", True
-)
-RESOURCE_IMMICH_PROTECT_CONTAINERS = _parse_container_name_list(
-    "RESOURCE_IMMICH_PROTECT_CONTAINERS", _DEFAULT_RESOURCE_IMMICH_PROTECT
-)
-# Also skip names starting with this prefix when Immich is the pressure source (default: immich)
-RESOURCE_IMMICH_PROTECT_PREFIX = os.getenv("RESOURCE_IMMICH_PROTECT_PREFIX", "immich").strip().lower()
-# When Immich ML RSS exceeds this many MB, treat pressure as Immich-driven (0 = CPU-only)
-RESOURCE_IMMICH_ML_RAM_PRESSURE_MB = max(
-    0, int(os.getenv("RESOURCE_IMMICH_ML_RAM_PRESSURE_MB", "400"))
-)
+RESOURCE_PROTECT_HEAVY_CONTAINERS = _env_bool("RESOURCE_PROTECT_HEAVY_CONTAINERS", True)
+RESOURCE_HEAVY_RAM_PERCENT = float(os.getenv("RESOURCE_HEAVY_RAM_PERCENT", "8"))
+RESOURCE_HEAVY_CPU_PERCENT = float(os.getenv("RESOURCE_HEAVY_CPU_PERCENT", "50"))
+RESOURCE_HEAVY_MIN_MEMORY_MB = max(64, int(os.getenv("RESOURCE_HEAVY_MIN_MEMORY_MB", "256")))
+RESOURCE_HEAVY_MAX_PROTECT = max(1, int(os.getenv("RESOURCE_HEAVY_MAX_PROTECT", "8")))
 
 
 def docker_container_ignored_for_alerts(name: str) -> bool:
