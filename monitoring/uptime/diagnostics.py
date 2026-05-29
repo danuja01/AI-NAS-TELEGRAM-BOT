@@ -13,14 +13,22 @@ logger = logging.getLogger(__name__)
 _last_ai_at: Dict[int, float] = {}
 
 
-async def diagnose_monitor_failure(monitor: Dict[str, Any], error: str) -> str:
+async def diagnose_monitor_failure(
+    monitor: Dict[str, Any],
+    error: str,
+    *,
+    on_demand: bool = False,
+) -> str:
     """Return AI summary text or empty if disabled/cooldown."""
-    if not config.UPTIME_AI_ON_INCIDENT or not config.OPENAI_API_KEY:
+    if not config.OPENAI_API_KEY:
+        return ""
+    if not on_demand and not config.UPTIME_AI_ON_INCIDENT:
         return ""
     mid = monitor["id"]
-    cooldown = max(15, config.UPTIME_AI_COOLDOWN_MINUTES) * 60
-    if time.time() - _last_ai_at.get(mid, 0) < cooldown:
-        return ""
+    if not on_demand:
+        cooldown = max(15, config.UPTIME_AI_COOLDOWN_MINUTES) * 60
+        if time.time() - _last_ai_at.get(mid, 0) < cooldown:
+            return ""
 
     evidence = await _gather_evidence(monitor, error)
     try:

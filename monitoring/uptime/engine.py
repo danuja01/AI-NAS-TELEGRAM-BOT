@@ -12,7 +12,6 @@ from telegram import Bot
 import config
 from monitoring.uptime import dependencies, notify, probes, store
 from monitoring.uptime.builtin import ensure_builtin_monitors, sync_docker_monitors
-from monitoring.uptime.diagnostics import diagnose_monitor_failure
 from monitoring.uptime import escalation
 from monitoring.uptime.reboot_watch import check_reboot_and_alert
 from monitoring.uptime.docker_images import scan_image_updates
@@ -135,12 +134,6 @@ async def _check_one(bot: Bot, monitor: Dict) -> None:
             affected = await dependencies.on_parent_down(mid, fresh.get("name", ""))
         await store.open_incident(mid, root_cause=result.error_message)
 
-    ai_summary = ""
-    if prev != "down" and config.UPTIME_AI_ON_INCIDENT:
-        ai_summary = await diagnose_monitor_failure(fresh, result.error_message)
-        if ai_summary:
-            await store.update_incident_ai_summary(mid, ai_summary)
-
     sev, stage = escalation.escalation_level(fresh)
     fail_n = int(fresh.get("consecutive_failures") or 0)
     err_msg = result.error_message
@@ -152,7 +145,7 @@ async def _check_one(bot: Bot, monitor: Dict) -> None:
         fresh,
         err_msg,
         datetime.utcnow(),
-        ai_summary=ai_summary if prev != "down" else "",
+        ai_summary="",
         affected_children=affected or None,
         severity=sev,
     )

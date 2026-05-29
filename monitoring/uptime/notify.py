@@ -35,6 +35,16 @@ def _alert_keyboard(monitor: Dict[str, Any], user_id: int) -> InlineKeyboardMark
             ),
         ],
     ]
+    if config.UPTIME_AI_BUTTON and config.OPENAI_API_KEY:
+        try:
+            rows.append([
+                InlineKeyboardButton(
+                    "🤖 AI assist",
+                    callback_data=callback_data_for_user("uai", user_id, str(mid)),
+                ),
+            ])
+        except ValueError as e:
+            logger.warning("alert keyboard uai for %s: %s", name, e)
     if mtype == "docker":
         cname = monitor.get("target", "").lstrip("/")[:40]
         try:
