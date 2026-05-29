@@ -33,6 +33,8 @@ async def orchestrator_command(update: Update, context: ContextTypes.DEFAULT_TYP
     """Show orchestrator status."""
     status = get_orchestrator().get_status_dict()
     th = status["thresholds"]
+    pause_cfg = status.get("pause_candidates") or []
+    stop_cfg = status.get("stop_candidates") or []
     lines = [
         "<b>Resource Orchestrator</b>",
         "",
@@ -72,6 +74,20 @@ async def orchestrator_command(update: Update, context: ContextTypes.DEFAULT_TYP
     lines.append(
         f"  Recovery delay: <code>{th['recovery_delay_minutes']}</code> min"
     )
+    lines.append("")
+    lines.append("<b>Stage 1 (pause) candidates</b>:")
+    if pause_cfg:
+        for name in pause_cfg:
+            lines.append(f"  • <code>{name}</code>")
+    else:
+        lines.append("  (none)")
+    lines.append("")
+    lines.append("<b>Stage 2 (stop) candidates</b>:")
+    if stop_cfg:
+        for name in stop_cfg:
+            lines.append(f"  • <code>{name}</code>")
+    else:
+        lines.append("  (none)")
     await reply_text_safe(update, "\n".join(lines), parse_mode=ParseMode.HTML)
 
 

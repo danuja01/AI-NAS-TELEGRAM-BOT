@@ -45,3 +45,11 @@ def test_recovery_conditions():
     assert recovery_conditions_met(_snap(60, 40)) is True
     assert recovery_conditions_met(_snap(75, 40)) is False
     assert recovery_conditions_met(_snap(60, 55)) is False
+
+
+def test_parse_container_lists_from_config():
+    import config
+    assert "affine" in config.RESOURCE_PAUSE_CONTAINERS
+    assert "jellyfin" in config.RESOURCE_STOP_CONTAINERS
+    assert "immich" in config.RESOURCE_CRITICAL_CONTAINERS
+    assert "immich" not in config.RESOURCE_PAUSE_CONTAINERS

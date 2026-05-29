@@ -297,6 +297,37 @@ RESOURCE_ORCHESTRATOR_STATE_PATH = os.getenv(
 )
 
 
+def _parse_container_name_list(env_var: str, default_csv: str) -> tuple[str, ...]:
+    """Comma-separated Docker container names (normalized to lowercase, no leading slash)."""
+    raw = os.getenv(env_var, default_csv)
+    seen: set[str] = set()
+    out: list[str] = []
+    for part in raw.split(","):
+        name = part.strip().lstrip("/").lower()
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return tuple(out)
+
+
+_DEFAULT_RESOURCE_CRITICAL = (
+    "immich,immich_postgres,immich_redis,immich_machine_learning,"
+    "tailscale,cloudflared,adguardhome,nas-telegram-bot"
+)
+_DEFAULT_RESOURCE_PAUSE = "affine,homarr,filebrowser"
+_DEFAULT_RESOURCE_STOP = (
+    "jellyfin,sonarr,radarr,prowlarr,bazarr,jellyseerr,qbittorrent,flaresolverr"
+)
+
+RESOURCE_CRITICAL_CONTAINERS = frozenset(
+    _parse_container_name_list("RESOURCE_CRITICAL_CONTAINERS", _DEFAULT_RESOURCE_CRITICAL)
+)
+_pause_raw = _parse_container_name_list("RESOURCE_PAUSE_CONTAINERS", _DEFAULT_RESOURCE_PAUSE)
+_stop_raw = _parse_container_name_list("RESOURCE_STOP_CONTAINERS", _DEFAULT_RESOURCE_STOP)
+RESOURCE_PAUSE_CONTAINERS = tuple(n for n in _pause_raw if n not in RESOURCE_CRITICAL_CONTAINERS)
+RESOURCE_STOP_CONTAINERS = tuple(n for n in _stop_raw if n not in RESOURCE_CRITICAL_CONTAINERS)
+
+
 def docker_container_ignored_for_alerts(name: str) -> bool:
     """True if this container name is in MONITOR_DOCKER_IGNORE (exact, case-insensitive)."""
     if not name or not MONITOR_DOCKER_IGNORE:

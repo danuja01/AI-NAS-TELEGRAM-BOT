@@ -16,38 +16,19 @@ from services import docker_service
 
 logger = logging.getLogger(__name__)
 
-# Never pause or stop these containers (normalized names without leading slash).
-CRITICAL_CONTAINERS: frozenset[str] = frozenset(
-    {
-        "immich",
-        "immich_postgres",
-        "immich_redis",
-        "immich_machine_learning",
-        "tailscale",
-        "cloudflared",
-        "adguardhome",
-        "nas-telegram-bot",
-    }
-)
-
-PAUSE_CONTAINERS: tuple[str, ...] = (
-    "affine",
-    "homarr",
-    "filebrowser",
-)
-
-STOP_CONTAINERS: tuple[str, ...] = (
-    "jellyfin",
-    "sonarr",
-    "radarr",
-    "prowlarr",
-    "bazarr",
-    "jellyseerr",
-    "qbittorrent",
-    "flaresolverr",
-)
-
 IMMICH_ML_CONTAINER = "immich_machine_learning"
+
+
+def critical_containers() -> frozenset[str]:
+    return config.RESOURCE_CRITICAL_CONTAINERS
+
+
+def pause_containers() -> tuple[str, ...]:
+    return config.RESOURCE_PAUSE_CONTAINERS
+
+
+def stop_containers() -> tuple[str, ...]:
+    return config.RESOURCE_STOP_CONTAINERS
 
 
 def normalize_container_name(name: str) -> str:
@@ -55,7 +36,7 @@ def normalize_container_name(name: str) -> str:
 
 
 def is_critical(name: str) -> bool:
-    return normalize_container_name(name) in CRITICAL_CONTAINERS
+    return normalize_container_name(name) in critical_containers()
 
 
 @dataclass

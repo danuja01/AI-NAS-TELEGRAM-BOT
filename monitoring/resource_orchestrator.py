@@ -160,6 +160,8 @@ class ResourceOrchestrator:
             "ram_percent": round(snap.ram_percent, 1),
             "cpu_percent": round(snap.cpu_percent, 1),
             "immich_ml_cpu": round(snap.immich_ml_cpu, 1),
+            "pause_candidates": list(ros.pause_containers()),
+            "stop_candidates": list(ros.stop_containers()),
             "thresholds": {
                 "ram_high": config.RESOURCE_RAM_HIGH_PERCENT,
                 "ram_recover": config.RESOURCE_RAM_RECOVER_PERCENT,
@@ -175,7 +177,7 @@ class ResourceOrchestrator:
         docker_names = set(statuses.keys())
         paused: List[str] = []
 
-        for logical in ros.PAUSE_CONTAINERS:
+        for logical in ros.pause_containers():
             if logical in state.paused_by_orchestrator:
                 continue
             actual = ros.resolve_container_name(docker_names, logical) or logical
@@ -204,7 +206,7 @@ class ResourceOrchestrator:
         docker_names = set(statuses.keys())
         stopped: List[str] = []
 
-        for logical in ros.STOP_CONTAINERS:
+        for logical in ros.stop_containers():
             if logical in state.stopped_by_orchestrator:
                 continue
             actual = ros.resolve_container_name(docker_names, logical) or logical
