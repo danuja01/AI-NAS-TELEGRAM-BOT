@@ -26,6 +26,9 @@ Destructive actions use Telegram confirmations; tell users to run the command th
 - `/alerts` — Unacknowledged alerts; `/alert_ack <id>` to dismiss
 - `/crowdsec` — CrowdSec alerts, bans, and decisions (requires CROWDSEC_MONITOR_ENABLED)
 - `/security` — AI NAS Security Assistant summary from CrowdSec evidence
+- `/orchestrator` — Resource orchestrator status (auto pause/stop under RAM/CPU pressure)
+- `/orchestrator_enable` · `/orchestrator_disable` — Enable/disable orchestrator (admin)
+- `/mitigate_now` · `/restore_now` — Manual mitigation or restore (admin)
 - `/uptime` — System uptime
 - `/health` — Health score and issues list
 - `/smart` or `/drives` — SMART drive summary (smartctl) plus OMV SMART device overview when available

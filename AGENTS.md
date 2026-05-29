@@ -30,6 +30,8 @@ With `AGENT_HOST_READONLY_TOOL=true`, the AI may call **`nas_host_readonly_profi
 
 **Uptime monitoring** (`UPTIME_MONITORING_ENABLED=true`): Uptime Kuma–style monitors, proactive Telegram alerts, MTBF/MTTR, Tailscale/Cloudflare/process probes, reboot and Docker image alerts. See **`MONITORING_SETUP.md`** for NAS prerequisites before first run.
 
+**Resource orchestrator** (`RESOURCE_ORCHESTRATOR_ENABLED=true`): when RAM/CPU exceed thresholds, pauses low-priority containers (Affine, Homarr, Filebrowser) then stops media stack containers if pressure remains; restores after stable recovery. Never touches Immich, Tailscale, AdGuard, or the bot itself. State in `data/resource_orchestrator_state.json`. Commands: `/orchestrator`, `/mitigate_now`, `/restore_now`.
+
 Recent `/chat`, `/analyze`, and `/ask` runs include **recent bot messages** in context: slash-command output (e.g. `/smart`) and **automated health/digest alerts** are saved to the conversation DB so follow-up questions like “is this alarming?” can refer to them.
 
 ### Dependencies
