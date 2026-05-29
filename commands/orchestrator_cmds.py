@@ -35,6 +35,8 @@ async def orchestrator_command(update: Update, context: ContextTypes.DEFAULT_TYP
     th = status["thresholds"]
     pause_cfg = status.get("pause_candidates") or []
     stop_cfg = status.get("stop_candidates") or []
+    immich_prot = status.get("protect_immich_stack")
+    immich_active = status.get("immich_protection_active")
     lines = [
         "<b>Resource Orchestrator</b>",
         "",
@@ -43,6 +45,7 @@ async def orchestrator_command(update: Update, context: ContextTypes.DEFAULT_TYP
         f"<b>RAM / CPU now</b>: <code>{status['ram_percent']}%</code> / "
         f"<code>{status['cpu_percent']}%</code>",
         f"<b>Immich ML CPU</b>: <code>{status['immich_ml_cpu']}%</code>",
+        f"<b>Protect Immich stack</b>: {"on" if immich_prot else "off"} + ("" if not immich_active else " (active — Immich names skipped)")",
         "",
         "<b>Paused containers</b>:",
     ]

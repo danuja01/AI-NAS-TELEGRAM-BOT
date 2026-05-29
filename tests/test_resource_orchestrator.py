@@ -53,3 +53,18 @@ def test_parse_container_lists_from_config():
     assert "jellyfin" in config.RESOURCE_STOP_CONTAINERS
     assert "immich" in config.RESOURCE_CRITICAL_CONTAINERS
     assert "immich" not in config.RESOURCE_PAUSE_CONTAINERS
+
+
+def test_should_skip_immich_under_ml_pressure():
+    from datetime import datetime, timezone
+    from monitoring.resource_orchestrator import ResourceSnapshot, should_skip_mitigation
+    snap = ResourceSnapshot(
+        ram_percent=90,
+        cpu_percent=50,
+        immich_ml_cpu=60,
+        immich_ml_memory=500 * 1024 * 1024,
+        collected_at=datetime.now(timezone.utc),
+    )
+    assert snap.immich_driven_pressure is True
+    assert should_skip_mitigation("immich", snap) is True
+    assert should_skip_mitigation("jellyfin", snap) is False

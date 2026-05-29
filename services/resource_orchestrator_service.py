@@ -39,6 +39,21 @@ def is_critical(name: str) -> bool:
     return normalize_container_name(name) in critical_containers()
 
 
+def immich_protect_containers() -> frozenset[str]:
+    return frozenset(config.RESOURCE_IMMICH_PROTECT_CONTAINERS)
+
+
+def is_immich_protected_container(name: str) -> bool:
+    """True if this container is part of the Immich stack (protected under Immich-driven pressure)."""
+    key = normalize_container_name(name)
+    if key in immich_protect_containers():
+        return True
+    prefix = (getattr(config, "RESOURCE_IMMICH_PROTECT_PREFIX", "") or "").strip().lower()
+    if prefix and key.startswith(prefix):
+        return True
+    return False
+
+
 @dataclass
 class OrchestratorPersistedState:
     """JSON-serializable orchestrator state."""

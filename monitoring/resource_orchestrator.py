@@ -46,6 +46,18 @@ class ResourceSnapshot:
     def immich_ml_pressure(self) -> bool:
         return self.immich_ml_cpu >= config.RESOURCE_IMMICH_ML_CPU_BOOST_PERCENT
 
+    @property
+    def immich_driven_pressure(self) -> bool:
+        """High load attributed to Immich ML — skip pausing/stopping the Immich stack."""
+        if not config.RESOURCE_PROTECT_IMMICH_STACK_UNDER_PRESSURE:
+            return False
+        if self.immich_ml_pressure:
+            return True
+        min_mb = config.RESOURCE_IMMICH_ML_RAM_PRESSURE_MB
+        if min_mb > 0 and self.immich_ml_memory >= min_mb * 1024 * 1024:
+            return True
+        return False
+
 
 @dataclass
 class MitigationResult:
@@ -106,6 +118,13 @@ def recovery_conditions_met(snap: ResourceSnapshot) -> bool:
     )
 
 
+def should_skip_mitigation(logical: str, snap: ResourceSnapshot) -> bool:
+    """Skip pause/stop for Immich stack when Immich ML is driving pressure."""
+    if not snap.immich_driven_pressure:
+        return False
+    return ros.is_immich_protected_container(logical)
+
+
 def mitigation_cause(snap: ResourceSnapshot) -> str:
     if snap.immich_ml_pressure:
         return ros.IMMICH_ML_CONTAINER
@@ -160,6 +179,9 @@ class ResourceOrchestrator:
             "ram_percent": round(snap.ram_percent, 1),
             "cpu_percent": round(snap.cpu_percent, 1),
             "immich_ml_cpu": round(snap.immich_ml_cpu, 1),
+            "immich_protection_active": snap.immich_driven_pressure,
+            "protect_immich_stack": config.RESOURCE_PROTECT_IMMICH_STACK_UNDER_PRESSURE,
+            "immich_protected_names": list(config.RESOURCE_IMMICH_PROTECT_CONTAINERS),
             "pause_candidates": list(ros.pause_containers()),
             "stop_candidates": list(ros.stop_containers()),
             "thresholds": {
@@ -179,6 +201,12 @@ class ResourceOrchestrator:
 
         for logical in ros.pause_containers():
             if logical in state.paused_by_orchestrator:
+                continue
+            if should_skip_mitigation(logical, snap):
+                logger.info(
+                    "Stage1 skip %s: Immich-driven pressure (protect Immich stack)",
+                    logical,
+                )
                 continue
             actual = ros.resolve_container_name(docker_names, logical) or logical
             if ros.safe_pause(actual, statuses):
@@ -208,6 +236,12 @@ class ResourceOrchestrator:
 
         for logical in ros.stop_containers():
             if logical in state.stopped_by_orchestrator:
+                continue
+            if should_skip_mitigation(logical, snap):
+                logger.info(
+                    "Stage2 skip %s: Immich-driven pressure (protect Immich stack)",
+                    logical,
+                )
                 continue
             actual = ros.resolve_container_name(docker_names, logical) or logical
             if ros.safe_stop(actual, statuses):

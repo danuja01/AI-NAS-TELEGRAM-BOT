@@ -310,9 +310,9 @@ def _parse_container_name_list(env_var: str, default_csv: str) -> tuple[str, ...
     return tuple(out)
 
 
-_DEFAULT_RESOURCE_CRITICAL = (
-    "immich,immich_postgres,immich_redis,immich_machine_learning,"
-    "tailscale,cloudflared,adguardhome,nas-telegram-bot"
+_DEFAULT_RESOURCE_CRITICAL = "tailscale,cloudflared,adguardhome,nas-telegram-bot"
+_DEFAULT_RESOURCE_IMMICH_PROTECT = (
+    "immich,immich_postgres,immich_redis,immich_machine_learning"
 )
 _DEFAULT_RESOURCE_PAUSE = "affine,homarr,filebrowser"
 _DEFAULT_RESOURCE_STOP = (
@@ -326,6 +326,19 @@ _pause_raw = _parse_container_name_list("RESOURCE_PAUSE_CONTAINERS", _DEFAULT_RE
 _stop_raw = _parse_container_name_list("RESOURCE_STOP_CONTAINERS", _DEFAULT_RESOURCE_STOP)
 RESOURCE_PAUSE_CONTAINERS = tuple(n for n in _pause_raw if n not in RESOURCE_CRITICAL_CONTAINERS)
 RESOURCE_STOP_CONTAINERS = tuple(n for n in _stop_raw if n not in RESOURCE_CRITICAL_CONTAINERS)
+
+RESOURCE_PROTECT_IMMICH_STACK_UNDER_PRESSURE = _env_bool(
+    "RESOURCE_PROTECT_IMMICH_STACK_UNDER_PRESSURE", True
+)
+RESOURCE_IMMICH_PROTECT_CONTAINERS = _parse_container_name_list(
+    "RESOURCE_IMMICH_PROTECT_CONTAINERS", _DEFAULT_RESOURCE_IMMICH_PROTECT
+)
+# Also skip names starting with this prefix when Immich is the pressure source (default: immich)
+RESOURCE_IMMICH_PROTECT_PREFIX = os.getenv("RESOURCE_IMMICH_PROTECT_PREFIX", "immich").strip().lower()
+# When Immich ML RSS exceeds this many MB, treat pressure as Immich-driven (0 = CPU-only)
+RESOURCE_IMMICH_ML_RAM_PRESSURE_MB = max(
+    0, int(os.getenv("RESOURCE_IMMICH_ML_RAM_PRESSURE_MB", "400"))
+)
 
 
 def docker_container_ignored_for_alerts(name: str) -> bool:
