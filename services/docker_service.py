@@ -166,6 +166,42 @@ def start_container(name_or_id: str) -> bool:
         raise
 
 
+def pause_container(name_or_id: str) -> bool:
+    """Pause a running Docker container."""
+    try:
+        container = get_container(name_or_id)
+        container.pause()
+        logger.info("Paused container %s", name_or_id)
+        return True
+    except Exception as e:
+        logger.error("Failed to pause container %s: %s", name_or_id, e)
+        raise
+
+
+def unpause_container(name_or_id: str) -> bool:
+    """Unpause a paused Docker container."""
+    try:
+        container = get_container(name_or_id)
+        container.unpause()
+        logger.info("Unpaused container %s", name_or_id)
+        return True
+    except Exception as e:
+        logger.error("Failed to unpause container %s: %s", name_or_id, e)
+        raise
+
+
+def get_container_status(name_or_id: str) -> Optional[str]:
+    """Return Docker status string (running, paused, exited, …) or None if missing."""
+    try:
+        container = get_container(name_or_id)
+        return (container.status or "").lower()
+    except ValueError:
+        return None
+    except Exception as e:
+        logger.warning("get_container_status %s: %s", name_or_id, e)
+        return None
+
+
 def get_container_logs(name_or_id: str, lines: int = 50) -> str:
     """Get logs from a Docker container."""
     try:

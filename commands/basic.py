@@ -43,6 +43,8 @@ HELP_SECTION_BODIES: dict[str, str] = {
         "<code>/alerts</code> — Unacknowledged alerts · <code>/alert_ack all</code> or <code>/alert_ack &lt;id&gt;</code>\n"
         "<code>/crowdsec</code> — CrowdSec alerts, bans, and decisions (when enabled)\n"
         "<code>/security</code> — AI NAS Security Assistant summary (CrowdSec)\n"
+        "<code>/orchestrator</code> — Resource orchestrator status (pause/stop under pressure)\n"
+        "<code>/mitigate_now</code> · <code>/restore_now</code> — Manual orchestrator (admin)\n"
         "<i>Background alerts: CPU/RAM/disk/SMART/Docker/systemd + CrowdSec + custom monitors.</i>\n"
     ),
     "dock": (

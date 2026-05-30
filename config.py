@@ -282,6 +282,57 @@ MONITOR_DOCKER_ALERT_MODE = (
 # Skip exited containers with restart policy no / unless-stopped / successful one-shot (on-failure + exit 0)
 MONITOR_DOCKER_SKIP_INTENTIONAL_STOP = _env_bool("MONITOR_DOCKER_SKIP_INTENTIONAL_STOP", True)
 
+# Resource-aware container orchestrator (pause/stop low-priority containers under pressure)
+RESOURCE_ORCHESTRATOR_ENABLED = _env_bool("RESOURCE_ORCHESTRATOR_ENABLED", False)
+RESOURCE_RAM_HIGH_PERCENT = float(os.getenv("RESOURCE_RAM_HIGH_PERCENT", "85"))
+RESOURCE_RAM_RECOVER_PERCENT = float(os.getenv("RESOURCE_RAM_RECOVER_PERCENT", "70"))
+RESOURCE_CPU_HIGH_PERCENT = float(os.getenv("RESOURCE_CPU_HIGH_PERCENT", "85"))
+RESOURCE_CPU_RECOVER_PERCENT = float(os.getenv("RESOURCE_CPU_RECOVER_PERCENT", "50"))
+RESOURCE_RAM_STAGE2_PERCENT = float(os.getenv("RESOURCE_RAM_STAGE2_PERCENT", "90"))
+RESOURCE_CPU_STAGE2_PERCENT = float(os.getenv("RESOURCE_CPU_STAGE2_PERCENT", "90"))
+RESOURCE_RECOVERY_DELAY_MINUTES = max(1, int(os.getenv("RESOURCE_RECOVERY_DELAY_MINUTES", "5")))
+RESOURCE_CHECK_INTERVAL_SECONDS = max(10, int(os.getenv("RESOURCE_CHECK_INTERVAL_SECONDS", "30")))
+RESOURCE_STAGE2_DELAY_SECONDS = max(30, int(os.getenv("RESOURCE_STAGE2_DELAY_SECONDS", "60")))
+RESOURCE_RESTORE_GAP_SECONDS = max(1, int(os.getenv("RESOURCE_RESTORE_GAP_SECONDS", "10")))
+RESOURCE_ORCHESTRATOR_STATE_PATH = os.getenv(
+    "RESOURCE_ORCHESTRATOR_STATE_PATH",
+    str(DATA_DIR / "resource_orchestrator_state.json"),
+)
+
+
+def _parse_container_name_list(env_var: str, default_csv: str) -> tuple[str, ...]:
+    """Comma-separated Docker container names (normalized to lowercase, no leading slash)."""
+    raw = os.getenv(env_var, default_csv)
+    seen: set[str] = set()
+    out: list[str] = []
+    for part in raw.split(","):
+        name = part.strip().lstrip("/").lower()
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return tuple(out)
+
+
+_DEFAULT_RESOURCE_CRITICAL = "tailscale,cloudflared,adguardhome,nas-telegram-bot"
+_DEFAULT_RESOURCE_PAUSE = "affine,homarr,filebrowser"
+_DEFAULT_RESOURCE_STOP = (
+    "jellyfin,sonarr,radarr,prowlarr,bazarr,jellyseerr,qbittorrent,flaresolverr"
+)
+
+RESOURCE_CRITICAL_CONTAINERS = frozenset(
+    _parse_container_name_list("RESOURCE_CRITICAL_CONTAINERS", _DEFAULT_RESOURCE_CRITICAL)
+)
+_pause_raw = _parse_container_name_list("RESOURCE_PAUSE_CONTAINERS", _DEFAULT_RESOURCE_PAUSE)
+_stop_raw = _parse_container_name_list("RESOURCE_STOP_CONTAINERS", _DEFAULT_RESOURCE_STOP)
+RESOURCE_PAUSE_CONTAINERS = tuple(n for n in _pause_raw if n not in RESOURCE_CRITICAL_CONTAINERS)
+RESOURCE_STOP_CONTAINERS = tuple(n for n in _stop_raw if n not in RESOURCE_CRITICAL_CONTAINERS)
+
+RESOURCE_PROTECT_HEAVY_CONTAINERS = _env_bool("RESOURCE_PROTECT_HEAVY_CONTAINERS", True)
+RESOURCE_HEAVY_RAM_PERCENT = float(os.getenv("RESOURCE_HEAVY_RAM_PERCENT", "8"))
+RESOURCE_HEAVY_CPU_PERCENT = float(os.getenv("RESOURCE_HEAVY_CPU_PERCENT", "50"))
+RESOURCE_HEAVY_MIN_MEMORY_MB = max(64, int(os.getenv("RESOURCE_HEAVY_MIN_MEMORY_MB", "256")))
+RESOURCE_HEAVY_MAX_PROTECT = max(1, int(os.getenv("RESOURCE_HEAVY_MAX_PROTECT", "8")))
+
 
 def docker_container_ignored_for_alerts(name: str) -> bool:
     """True if this container name is in MONITOR_DOCKER_IGNORE (exact, case-insensitive)."""

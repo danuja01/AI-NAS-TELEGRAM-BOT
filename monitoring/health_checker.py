@@ -396,6 +396,21 @@ async def start_health_monitoring(bot: Bot):
             args=[bot],
             id="autotroubleshoot_unack_scan",
         )
+    from monitoring.resource_orchestrator import resource_orchestrator_tick
+
+    orch_iv = max(10, config.RESOURCE_CHECK_INTERVAL_SECONDS)
+    _scheduler.add_job(
+        resource_orchestrator_tick,
+        "interval",
+        seconds=orch_iv,
+        args=[bot],
+        id="resource_orchestrator",
+    )
+    logger.info(
+        "Resource orchestrator: check every %ss (env default enabled=%s)",
+        orch_iv,
+        config.RESOURCE_ORCHESTRATOR_ENABLED,
+    )
     if config.CROWDSEC_MONITOR_ENABLED:
         from monitoring.crowdsec_monitor import poll_crowdsec_alerts, send_crowdsec_daily_report
 
