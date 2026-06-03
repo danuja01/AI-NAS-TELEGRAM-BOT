@@ -307,11 +307,24 @@ async def handle_storage_callbacks(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
     chat_id = query.message.chat_id if query.message else update.effective_chat.id
 
-    if data == CB_DCLEAN_CANCEL or data == CB_DAGG_CANCEL:
-        await query.edit_message_text("❌ Cancelled.", parse_mode=ParseMode.HTML)
-        return
+    for cancel_prefix in (CB_DCLEAN_CANCEL, CB_DAGG_CANCEL):
+        uid, _ = parse_callback_user_id(data, cancel_prefix)
+        if uid is not None:
+            if uid != user_id:
+                await query.edit_message_text(
+                    "🚫 This confirmation is for another user.", parse_mode=ParseMode.HTML
+                )
+                return
+            await query.edit_message_text("❌ Cancelled.", parse_mode=ParseMode.HTML)
+            return
 
-    if data == CB_DCLEAN_CONFIRM:
+    uid, _ = parse_callback_user_id(data, CB_DCLEAN_CONFIRM)
+    if uid is not None:
+        if uid != user_id:
+            await query.edit_message_text(
+                "🚫 This confirmation is for another user.", parse_mode=ParseMode.HTML
+            )
+            return
         await query.edit_message_text("🧹 Running safe cleanup…", parse_mode=ParseMode.HTML)
         try:
             result = await asyncio.to_thread(dss.run_safe_prune, False)
@@ -326,11 +339,23 @@ async def handle_storage_callbacks(update: Update, context: ContextTypes.DEFAULT
             )
         return
 
-    if data == CB_DAGG_STEP1:
+    uid, _ = parse_callback_user_id(data, CB_DAGG_STEP1)
+    if uid is not None:
+        if uid != user_id:
+            await query.edit_message_text(
+                "🚫 This confirmation is for another user.", parse_mode=ParseMode.HTML
+            )
+            return
         keyboard = [
             [
-                InlineKeyboardButton("✅ CONFIRM aggressive cleanup", callback_data=CB_DAGG_CONFIRM),
-                InlineKeyboardButton("❌ Cancel", callback_data=callback_data_for_user(CB_DAGG_CANCEL, user_id)),
+                InlineKeyboardButton(
+                    "✅ CONFIRM aggressive cleanup",
+                    callback_data=callback_data_for_user(CB_DAGG_CONFIRM, user_id),
+                ),
+                InlineKeyboardButton(
+                    "❌ Cancel",
+                    callback_data=callback_data_for_user(CB_DAGG_CANCEL, user_id),
+                ),
             ]
         ]
         await query.edit_message_text(
@@ -342,7 +367,13 @@ async def handle_storage_callbacks(update: Update, context: ContextTypes.DEFAULT
         )
         return
 
-    if data == CB_DAGG_CONFIRM:
+    uid, _ = parse_callback_user_id(data, CB_DAGG_CONFIRM)
+    if uid is not None:
+        if uid != user_id:
+            await query.edit_message_text(
+                "🚫 This confirmation is for another user.", parse_mode=ParseMode.HTML
+            )
+            return
         await query.edit_message_text("🧹 Running aggressive cleanup…", parse_mode=ParseMode.HTML)
         try:
             result = await asyncio.to_thread(dss.run_safe_prune, True)
