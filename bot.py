@@ -163,6 +163,10 @@ async def post_init(application: Application):
     logger.info("Starting health monitoring, metrics, digests, cron hook…")
     await start_health_monitoring(application.bot)
 
+    from monitoring.uptime.reboot_watch import check_reboot_on_startup
+
+    asyncio.create_task(check_reboot_on_startup(application.bot))
+
     if config.AUTO_INDEX_ON_START:
         asyncio.create_task(run_auto_index_on_startup(application))
         logger.info("Scheduled post-start auto-index (AUTO_INDEX_ON_START=1)")
