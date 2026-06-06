@@ -23,6 +23,21 @@ from database.memory import save_conversation, save_command
 
 logger = logging.getLogger(__name__)
 
+
+def _telegram_initiator_label(update: Update) -> str:
+    user = update.effective_user
+    if not user:
+        return "Telegram"
+    parts = []
+    if user.username:
+        parts.append(f"@{user.username}")
+    name = " ".join(p for p in (user.first_name, user.last_name) if p)
+    if name:
+        parts.append(name)
+    parts.append(f"id:{user.id}")
+    return "Telegram — " + " / ".join(parts)
+
+
 _CMD_HINT_RESTART_SERVICE = (
     "You used /restart_service without a service name.\n\n"
     "Send your **next message** as the systemd service name, or `/cancel` to abort.\n\n"
@@ -218,7 +233,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             await save_conversation(user_id, "user", "/reboot")
             await save_conversation(user_id, "assistant", "System reboot initiated")
             await save_command(user_id, "/reboot", "System rebooting")
-            reboot_system()
+            reboot_system(initiated_by=_telegram_initiator_label(update))
             return
 
         uid, _ = parse_callback_user_id(data, "sd")
@@ -232,7 +247,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             await save_conversation(user_id, "user", "/shutdown")
             await save_conversation(user_id, "assistant", "System shutdown initiated")
             await save_command(user_id, "/shutdown", "System shutting down")
-            shutdown_system()
+            shutdown_system(initiated_by=_telegram_initiator_label(update))
             return
 
         if data.startswith("restart_svc_"):
@@ -247,11 +262,11 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         elif data == "reboot_confirm":
             await query.edit_message_text("🔄 **REBOOTING SYSTEM NOW**\n\nThe bot will be offline until the system restarts.")
             await save_command(user_id, "/reboot", "System rebooting")
-            reboot_system()
+            reboot_system(initiated_by=_telegram_initiator_label(update))
         elif data == "shutdown_confirm":
             await query.edit_message_text("🛑 **SHUTTING DOWN SYSTEM NOW**\n\nPhysical access will be required to restart.")
             await save_command(user_id, "/shutdown", "System shutting down")
-            shutdown_system()
+            shutdown_system(initiated_by=_telegram_initiator_label(update))
         elif data.startswith(("dr:", "ds:", "drestart_confirm_", "dstop_confirm_", "restart_confirm_", "stop_confirm_")):
             from commands.docker_cmds import handle_docker_confirmation
 

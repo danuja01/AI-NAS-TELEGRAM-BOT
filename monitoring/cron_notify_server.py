@@ -4,6 +4,9 @@ Optional HTTP hook for cron/job notifications (binds CRON_NOTIFY_BIND:CRON_NOTIF
 POST /notify with JSON:
   {"secret": "...", "job": "backup", "status": "ok|fail", "message": "..."}
 
+POST /power-notify with JSON (or query params) before SSH reboot/shutdown:
+  {"secret": "...", "action": "reboot|shutdown", "initiated_by": "ssh:admin"}
+
 secret must match CRON_NOTIFY_SECRET. Intended for localhost + docker exec curl from host.
 """
 
@@ -64,7 +67,7 @@ def _make_handler(schedule_plain_text: Callable[[str], None], loop: asyncio.Abst
             if path.startswith("/push/"):
                 self._handle_push(path[len("/push/"):])
                 return
-            if path not in ("/notify", "/watchtower"):
+            if path not in ("/notify", "/watchtower", "/power-notify"):
                 self.send_response(404)
                 self.end_headers()
                 return
@@ -96,6 +99,28 @@ def _make_handler(schedule_plain_text: Callable[[str], None], loop: asyncio.Abst
             if not _secret_ok(str(secret)):
                 logger.warning("cron_notify: bad secret from %s", ip)
                 self.send_response(403)
+                self.end_headers()
+                return
+
+            if path == "/power-notify":
+                action = str(
+                    data.get("action")
+                    or (qs.get("action", [""])[0] if qs.get("action") else "")
+                ).strip().lower()
+                if action not in ("reboot", "shutdown"):
+                    self.send_response(400)
+                    self.end_headers()
+                    return
+                initiated_by = str(
+                    data.get("initiated_by")
+                    or data.get("user")
+                    or (qs.get("initiated_by", [""])[0] if qs.get("initiated_by") else "")
+                    or "SSH / host"
+                ).strip() or "SSH / host"
+                from services.email_service import send_power_action_alert
+
+                send_power_action_alert(action, initiated_by=initiated_by)
+                self.send_response(204)
                 self.end_headers()
                 return
 

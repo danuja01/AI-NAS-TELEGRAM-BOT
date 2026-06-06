@@ -189,6 +189,23 @@ CRON_NOTIFY_BIND = os.getenv("CRON_NOTIFY_BIND", "127.0.0.1").strip()
 CRON_NOTIFY_PORT = int(os.getenv("CRON_NOTIFY_PORT", "18765"))
 CRON_NOTIFY_RATE_PER_MINUTE = max(1, int(os.getenv("CRON_NOTIFY_RATE_PER_MINUTE", "30")))
 
+# Email alerts for reboot/shutdown (SMTP)
+EMAIL_ALERTS_ENABLED = _env_bool("EMAIL_ALERTS_ENABLED", False)
+EMAIL_ALERT_RECIPIENTS = [
+    addr.strip()
+    for addr in os.getenv("EMAIL_ALERT_RECIPIENTS", "").split(",")
+    if addr.strip() and "@" in addr.strip()
+]
+SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "").strip()
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("SMTP_FROM", "").strip()
+SMTP_USE_TLS = _env_bool("SMTP_USE_TLS", True)
+SMTP_USE_SSL = _env_bool("SMTP_USE_SSL", False)
+# Friendly name in email templates (defaults to container/host hostname)
+NAS_DISPLAY_NAME = os.getenv("NAS_DISPLAY_NAME", "").strip()
+
 # Uptime Kuma-style monitor platform
 UPTIME_MONITORING_ENABLED = _env_bool("UPTIME_MONITORING_ENABLED", True)
 UPTIME_TICK_SECONDS = max(15, int(os.getenv("UPTIME_TICK_SECONDS", "30")))
