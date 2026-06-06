@@ -166,6 +166,19 @@ def list_common_services() -> List[Dict[str, Any]]:
     return services
 
 
+def _run_host_power_action(profile: str) -> bool:
+    """Reboot or shut down the NAS host via host_runner (nsenter/SSH)."""
+    from services.host_runner import run_profile
+
+    result = run_profile(profile, timeout=10)
+    if result.error:
+        raise RuntimeError(result.error)
+    if result.exit_code != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise RuntimeError(detail or f"{profile} failed (exit {result.exit_code})")
+    return True
+
+
 def reboot_system() -> bool:
     """
     Reboot the system.
@@ -175,16 +188,7 @@ def reboot_system() -> bool:
     """
     try:
         logger.warning("SYSTEM REBOOT INITIATED")
-        
-        result = subprocess.run(
-            ['sudo', 'reboot'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        return True
-    
+        return _run_host_power_action("reboot")
     except Exception as e:
         logger.error(f"Failed to reboot system: {e}")
         raise
@@ -199,16 +203,7 @@ def shutdown_system() -> bool:
     """
     try:
         logger.warning("SYSTEM SHUTDOWN INITIATED")
-        
-        result = subprocess.run(
-            ['sudo', 'shutdown', 'now'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        return True
-    
+        return _run_host_power_action("shutdown")
     except Exception as e:
         logger.error(f"Failed to shutdown system: {e}")
         raise

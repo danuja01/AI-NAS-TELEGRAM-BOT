@@ -7,7 +7,7 @@ Modes:
 - none:   disabled (returns structured error)
 
 Read-only profiles (fixed argv) are implemented in ``services.readonly``;
-this module keeps mutating host operations only.
+this module keeps mutating host operations only (apt, omv-upgrade, reboot, shutdown).
 """
 
 from __future__ import annotations
@@ -109,6 +109,12 @@ def run_profile(
     elif profile == "apt_clean":
         inner = ["apt-get", "clean", "-qq"]
         to = config.STORAGE_CMD_TIMEOUT
+    elif profile == "reboot":
+        inner = ["systemctl", "reboot"]
+        to = 10
+    elif profile == "shutdown":
+        inner = ["systemctl", "poweroff"]
+        to = 10
     elif profile in ALL_READONLY_PROFILE_NAMES:
         inner_list, v_err, cap = build_readonly_inner(profile, extra_args)
         if v_err or not inner_list:
