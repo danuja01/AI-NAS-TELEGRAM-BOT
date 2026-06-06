@@ -17,6 +17,7 @@ import config
 logger = logging.getLogger(__name__)
 
 _POWER_ACTIONS = frozenset({"reboot", "shutdown"})
+_PENDING_ACTION_FILE = config.DATA_DIR / "email_pending_power_action.txt"
 
 
 def _nas_display_name() -> str:
@@ -259,6 +260,164 @@ def _build_smtp_test_content(host: str, to: str, initiated_by: str, when: str) -
     return subject, plain, html
 
 
+def record_pending_power_action(action: str) -> None:
+    action = (action or "").strip().lower()
+    if action not in _POWER_ACTIONS:
+        return
+    try:
+        _PENDING_ACTION_FILE.write_text(action, encoding="utf-8")
+    except OSError as e:
+        logger.warning("Could not record pending power action: %s", e)
+
+
+def pop_pending_power_action() -> Optional[str]:
+    try:
+        if not _PENDING_ACTION_FILE.is_file():
+            return None
+        action = _PENDING_ACTION_FILE.read_text(encoding="utf-8").strip().lower()
+        _PENDING_ACTION_FILE.unlink(missing_ok=True)
+        return action if action in _POWER_ACTIONS else None
+    except OSError as e:
+        logger.warning("Could not read pending power action: %s", e)
+        return None
+
+
+def _format_uptime(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    days, rem = divmod(seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if secs or not parts:
+        parts.append(f"{secs}s")
+    return " ".join(parts)
+
+
+def _build_back_online_content(
+    host: str,
+    boot_dt: str,
+    prev_boot_dt: str,
+    uptime_label: str,
+    reason_html: str,
+    reason_plain: str,
+) -> Tuple[str, str, str]:
+    subject = f"[{host}] NAS is back online"
+    plain = (
+        f"NAS back online — {host}\n\n"
+        f"{reason_plain}\n\n"
+        f"Current boot: {boot_dt}\n"
+        f"Previous boot: {prev_boot_dt}\n"
+        f"Uptime: {uptime_label}\n"
+    )
+    html = f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6f8;padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#16a34a,#15803d);padding:28px 32px;color:#ffffff;">
+          <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.9;">NAS Alert</div>
+          <div style="font-size:24px;font-weight:700;margin-top:8px;">Back Online</div>
+          <div style="font-size:15px;margin-top:6px;opacity:0.95;">{host}</div>
+        </td></tr>
+        <tr><td style="padding:32px;color:#0f172a;">
+          <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">
+            {reason_html}
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin:0 0 20px;">
+            <tr><td style="padding:16px 18px;font-size:15px;line-height:1.5;color:#166534;">
+              ✅ The NAS is running again and services are coming back online.
+            </td></tr>
+          </table>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:14px;color:#475569;">
+            <tr><td style="padding:8px 0;border-top:1px solid #e2e8f0;"><strong>Current boot:</strong> {boot_dt}</td></tr>
+            <tr><td style="padding:8px 0;border-top:1px solid #e2e8f0;"><strong>Previous boot:</strong> {prev_boot_dt}</td></tr>
+            <tr><td style="padding:8px 0;border-top:1px solid #e2e8f0;"><strong>Uptime:</strong> {uptime_label}</td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:18px 32px;background:#f8fafc;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;">
+          Automated message from your NAS Telegram assistant. No reply is required.
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+    return subject, plain, html
+
+
+def send_back_online_alert(
+    *,
+    boot_time: int,
+    previous_boot_time: int,
+    uptime_seconds: int,
+) -> bool:
+    """
+    Email configured recipients when the NAS comes back after reboot/shutdown.
+    """
+    if not email_alerts_configured():
+        return False
+
+    pending = pop_pending_power_action()
+    if pending == "reboot":
+        reason = (
+            "Your NAS has <strong>finished rebooting</strong> and is back online. "
+            "Services should be fully available within a few minutes."
+        )
+        reason_plain = (
+            "Your NAS has finished rebooting and is back online. "
+            "Services should be fully available within a few minutes."
+        )
+    elif pending == "shutdown":
+        reason = (
+            "Your NAS is <strong>back online</strong> after a planned maintenance shutdown."
+        )
+        reason_plain = "Your NAS is back online after a planned maintenance shutdown."
+    else:
+        reason = (
+            "Your NAS is <strong>back online</strong>. "
+            "A system restart was detected."
+        )
+        reason_plain = "Your NAS is back online. A system restart was detected."
+
+    host = _escape_html(_nas_display_name())
+    boot_dt = _escape_html(
+        datetime.fromtimestamp(boot_time, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    )
+    prev_dt = _escape_html(
+        datetime.fromtimestamp(previous_boot_time, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    )
+    uptime_label = _escape_html(_format_uptime(uptime_seconds))
+    subject, plain, html = _build_back_online_content(
+        host,
+        boot_dt,
+        prev_dt,
+        uptime_label,
+        reason,
+        reason_plain,
+    )
+    recipients = list(config.EMAIL_ALERT_RECIPIENTS)
+    try:
+        _send_message(subject, plain, html, recipients)
+        logger.info(
+            "Back-online email sent to %d recipient(s) (pending=%s)",
+            len(recipients),
+            pending or "none",
+        )
+        return True
+    except Exception as e:
+        logger.error("Failed to send back-online email: %s", e)
+        return False
+
+
 def send_smtp_test_email(to: str, *, initiated_by: str = "Telegram") -> None:
     """
     Send a test email to one configured recipient.
@@ -303,6 +462,7 @@ def send_power_action_alert(action: str, *, initiated_by: str = "System") -> boo
     subject, plain, html = _build_message(action, initiated_by)
     try:
         _send_message(subject, plain, html, recipients)
+        record_pending_power_action(action)
         logger.info(
             "Power-action email sent (%s) to %d recipient(s), initiated_by=%s",
             action,
