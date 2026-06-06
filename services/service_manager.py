@@ -179,7 +179,16 @@ def _run_host_power_action(profile: str) -> bool:
     return True
 
 
-def reboot_system() -> bool:
+def _notify_power_action_email(action: str, initiated_by: str) -> None:
+    try:
+        from services.email_service import send_power_action_alert
+
+        send_power_action_alert(action, initiated_by=initiated_by)
+    except Exception as e:
+        logger.warning("Power-action email notification failed: %s", e)
+
+
+def reboot_system(*, initiated_by: str = "NAS Telegram bot") -> bool:
     """
     Reboot the system.
     
@@ -187,14 +196,15 @@ def reboot_system() -> bool:
         True if reboot command executed successfully
     """
     try:
-        logger.warning("SYSTEM REBOOT INITIATED")
+        logger.warning("SYSTEM REBOOT INITIATED (by %s)", initiated_by)
+        _notify_power_action_email("reboot", initiated_by)
         return _run_host_power_action("reboot")
     except Exception as e:
         logger.error(f"Failed to reboot system: {e}")
         raise
 
 
-def shutdown_system() -> bool:
+def shutdown_system(*, initiated_by: str = "NAS Telegram bot") -> bool:
     """
     Shutdown the system.
     
@@ -202,7 +212,8 @@ def shutdown_system() -> bool:
         True if shutdown command executed successfully
     """
     try:
-        logger.warning("SYSTEM SHUTDOWN INITIATED")
+        logger.warning("SYSTEM SHUTDOWN INITIATED (by %s)", initiated_by)
+        _notify_power_action_email("shutdown", initiated_by)
         return _run_host_power_action("shutdown")
     except Exception as e:
         logger.error(f"Failed to shutdown system: {e}")
