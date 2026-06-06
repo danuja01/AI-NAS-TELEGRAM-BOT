@@ -76,6 +76,7 @@ Destructive actions use Telegram confirmations; tell users to run the command th
 - `/services` — Systemd services list/status
 - `/restart_service` — Restart one service
 - `/reboot`, `/shutdown` — Host power (confirmations)
+- `/smtptest <email>` — SMTP test (EMAIL_ALERT_RECIPIENTS only)
 - `/updates`, `/omv_updates` — APT/OMV updates
 - `/upgrade` — Run omv-upgrade (strong confirmation)
 

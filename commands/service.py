@@ -2,6 +2,7 @@
 Service management command handlers.
 """
 
+import asyncio
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -127,6 +128,44 @@ async def restart_service_command(update: Update, context: ContextTypes.DEFAULT_
 
     service_name = context.args[0]
     await send_restart_service_confirmation(update, context, user_id, service_name)
+
+
+@require_auth
+@rate_limit
+async def smtptest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /smtptest <email> — send SMTP test only to EMAIL_ALERT_RECIPIENTS."""
+    import config
+    from services.email_service import send_smtp_test_email
+
+    allowed = ", ".join(config.EMAIL_ALERT_RECIPIENTS) or "(none configured)"
+    if not context.args:
+        await update.message.reply_text(
+            "📧 **SMTP test**\n\n"
+            "Usage: `/smtptest email@example.com`\n\n"
+            "For security, the address must be listed in `EMAIL_ALERT_RECIPIENTS`:\n"
+            f"`{allowed}`",
+            parse_mode="Markdown",
+        )
+        return
+
+    target = context.args[0].strip()
+    await update.message.reply_text(f"📧 Sending SMTP test to `{target}`...", parse_mode="Markdown")
+    try:
+        await asyncio.to_thread(
+            send_smtp_test_email,
+            target,
+            initiated_by=_telegram_initiator_label(update),
+        )
+        await update.message.reply_text(
+            format_success(f"SMTP test email sent to `{target}`"),
+            parse_mode="Markdown",
+        )
+        await save_command(update.effective_user.id, f"/smtptest {target}", "SMTP test sent")
+    except ValueError as e:
+        await update.message.reply_text(format_error(str(e)), parse_mode="Markdown")
+    except Exception as e:
+        logger.error("smtptest failed: %s", e, exc_info=True)
+        await update.message.reply_text(format_error(f"SMTP test failed: {e}"))
 
 
 @require_auth
