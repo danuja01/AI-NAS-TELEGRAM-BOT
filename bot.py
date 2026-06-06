@@ -112,6 +112,7 @@ TELEGRAM_BOT_COMMANDS = [
     BotCommand("restart_service", "Restart service"),
     BotCommand("reboot", "Reboot (confirm)"),
     BotCommand("shutdown", "Shutdown (confirm)"),
+    BotCommand("smtptest", "Test SMTP email alerts"),
     BotCommand("ask", "Ask documents (RAG)"),
     BotCommand("chat", "Chat with AI"),
     BotCommand("summarize", "Summarize docs"),
@@ -283,6 +284,7 @@ def main():
     application.add_handler(CommandHandler("restart_service", service.restart_service_command))
     application.add_handler(CommandHandler("reboot", service.reboot_command))
     application.add_handler(CommandHandler("shutdown", service.shutdown_command))
+    application.add_handler(CommandHandler("smtptest", service.smtptest_command))
     
     # Register command handlers - AI
     application.add_handler(CommandHandler("ask", ai_cmds.ask_command))

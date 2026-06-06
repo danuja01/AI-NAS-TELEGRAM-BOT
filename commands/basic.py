@@ -91,6 +91,7 @@ HELP_SECTION_BODIES: dict[str, str] = {
         "<code>/restart_service</code> — Restart one service by name\n"
         "<code>/reboot</code> — Reboot the NAS (confirmation)\n"
         "<code>/shutdown</code> — Shut down the NAS (confirmation)\n"
+        "<code>/smtptest &lt;email&gt;</code> — Test SMTP (EMAIL_ALERT_RECIPIENTS only)\n"
         "<code>/updates</code> — Check APT / OMV updates on the host\n"
         "<code>/omv_updates</code> — Updates plus OMV-specific note\n"
         "<code>/upgrade</code> — Run omv-upgrade (strong confirmation)\n"

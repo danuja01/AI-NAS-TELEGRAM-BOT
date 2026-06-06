@@ -32,11 +32,26 @@ def _nas_display_name() -> str:
 def email_alerts_configured() -> bool:
     if not getattr(config, "EMAIL_ALERTS_ENABLED", False):
         return False
+    return smtp_ready()
+
+
+def smtp_ready() -> bool:
     if not (getattr(config, "SMTP_HOST", "") or "").strip():
         return False
     if not getattr(config, "EMAIL_ALERT_RECIPIENTS", None):
         return False
     return True
+
+
+def allowed_alert_recipient(email: str) -> Optional[str]:
+    """Return canonical recipient if ``email`` is listed in EMAIL_ALERT_RECIPIENTS."""
+    needle = (email or "").strip().lower()
+    if not needle or "@" not in needle:
+        return None
+    for addr in config.EMAIL_ALERT_RECIPIENTS:
+        if addr.strip().lower() == needle:
+            return addr.strip()
+    return None
 
 
 def _build_reboot_content(host: str, initiated_by: str, when: str) -> Tuple[str, str, str]:
@@ -197,6 +212,77 @@ def _send_message(subject: str, plain: str, html: str, recipients: List[str]) ->
             server.quit()
         except Exception:
             pass
+
+
+def _build_smtp_test_content(host: str, to: str, initiated_by: str, when: str) -> Tuple[str, str, str]:
+    subject = f"[{host}] SMTP test — email alerts OK"
+    plain = (
+        f"SMTP test — {host}\n\n"
+        "This is a test message from your NAS Telegram assistant.\n"
+        "If you received it, reboot/shutdown email alerts are configured correctly.\n\n"
+        f"Sent to: {to}\n"
+        f"Requested by: {initiated_by}\n"
+        f"Time (UTC): {when}\n"
+    )
+    html = f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6f8;padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#059669,#047857);padding:28px 32px;color:#ffffff;">
+          <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.9;">SMTP Test</div>
+          <div style="font-size:24px;font-weight:700;margin-top:8px;">Email alerts configured</div>
+          <div style="font-size:15px;margin-top:6px;opacity:0.95;">{host}</div>
+        </td></tr>
+        <tr><td style="padding:32px;color:#0f172a;">
+          <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">
+            This is a <strong>test message</strong> from your NAS Telegram assistant.
+            If you received it, SMTP settings for reboot/shutdown alerts are working.
+          </p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:14px;color:#475569;">
+            <tr><td style="padding:8px 0;border-top:1px solid #e2e8f0;"><strong>Sent to:</strong> {to}</td></tr>
+            <tr><td style="padding:8px 0;border-top:1px solid #e2e8f0;"><strong>Requested by:</strong> {initiated_by}</td></tr>
+            <tr><td style="padding:8px 0;border-top:1px solid #e2e8f0;"><strong>Time (UTC):</strong> {when}</td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:18px 32px;background:#f8fafc;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;">
+          Automated test from /smtptest. No reply is required.
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+    return subject, plain, html
+
+
+def send_smtp_test_email(to: str, *, initiated_by: str = "Telegram") -> None:
+    """
+    Send a test email to one configured recipient.
+
+    Raises ValueError for validation errors; smtplib/OS errors on send failure.
+    """
+    if not smtp_ready():
+        raise ValueError(
+            "SMTP is not configured. Set SMTP_HOST and EMAIL_ALERT_RECIPIENTS in .env."
+        )
+    recipient = allowed_alert_recipient(to)
+    if not recipient:
+        allowed = ", ".join(config.EMAIL_ALERT_RECIPIENTS) or "(none)"
+        raise ValueError(
+            f"`{to}` is not in EMAIL_ALERT_RECIPIENTS. Allowed: {allowed}"
+        )
+
+    host = _escape_html(_nas_display_name())
+    who = _escape_html(initiated_by or "Telegram")
+    when = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    to_html = _escape_html(recipient)
+    subject, plain, html = _build_smtp_test_content(host, to_html, who, when)
+    _send_message(subject, plain, html, [recipient])
+    logger.info("SMTP test email sent to %s (requested by %s)", recipient, initiated_by)
 
 
 def send_power_action_alert(action: str, *, initiated_by: str = "System") -> bool:
