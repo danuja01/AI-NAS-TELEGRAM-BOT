@@ -43,6 +43,7 @@ services:
       # 0.0.0.0 inside container so host 127.0.0.1:18765 port mapping works (not 127.0.0.1 in-container)
       - CRON_NOTIFY_BIND=${CRON_NOTIFY_BIND:-0.0.0.0}
       - CRON_NOTIFY_PORT=${CRON_NOTIFY_PORT:-18765}
+      - STATS_HTTP_ENABLED=${STATS_HTTP_ENABLED:-true}
       - EMAIL_ALERTS_ENABLED=${EMAIL_ALERTS_ENABLED:-false}
       - EMAIL_ALERT_RECIPIENTS=${EMAIL_ALERT_RECIPIENTS:-}
       - SMTP_HOST=${SMTP_HOST:-}
@@ -110,7 +111,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Secrets: inject via `environment` / env_file — do not bind-mount .env into the container
 
-    # Cron/Watchtower HTTP hook (loopback on host only; requires CRON_NOTIFY_SECRET)
+    # Bot HTTP: GET /stats (default) + cron/Watchtower POST when CRON_NOTIFY_SECRET is set (loopback on host)
     ports:
       - "127.0.0.1:${CRON_NOTIFY_PORT:-18765}:${CRON_NOTIFY_PORT:-18765}"
       - "${UPTIME_DASHBOARD_PORT:-18766}:${UPTIME_DASHBOARD_PORT:-18766}"

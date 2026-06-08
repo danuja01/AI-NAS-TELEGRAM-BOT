@@ -1,6 +1,8 @@
 """
 Optional HTTP hook for cron/job notifications (binds CRON_NOTIFY_BIND:CRON_NOTIFY_PORT).
 
+GET /stats — JSON {"cpu": 22.4, "ram": 54.2, "temp": 41} (STATS_HTTP_ENABLED, default on).
+
 POST /notify with JSON:
   {"secret": "...", "job": "backup", "status": "ok|fail", "message": "..."}
 
@@ -158,13 +160,36 @@ def _make_handler(schedule_plain_text: Callable[[str], None], loop: asyncio.Abst
                 self.send_response(404)
             self.end_headers()
 
+        def _handle_stats(self):
+            if not config.STATS_HTTP_ENABLED:
+                self.send_response(404)
+                self.end_headers()
+                return
+            ip = _client_ip(self)
+            if not _rate_limit_ok(ip):
+                self.send_response(429)
+                self.end_headers()
+                return
+            from services.system_monitor import get_simple_stats
+
+            payload = get_simple_stats()
+            body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         def do_GET(self):  # noqa: N802
-            path = self.path.rstrip("/")
+            path = urlparse(self.path).path.rstrip("/")
             if path.startswith("/push/"):
                 self._handle_push(path[len("/push/"):])
                 return
+            if path == "/stats":
+                self._handle_stats()
+                return
             if path == "/health":
-                if not config.CRON_NOTIFY_SECRET:
+                if not config.CRON_NOTIFY_SECRET and not config.STATS_HTTP_ENABLED:
                     self.send_response(503)
                     self.end_headers()
                     return
@@ -180,9 +205,11 @@ def _make_handler(schedule_plain_text: Callable[[str], None], loop: asyncio.Abst
 
 def start_cron_notify_server(loop: asyncio.AbstractEventLoop, send_html: Callable[[str], Awaitable[None]]):
     global _server, _server_thread
-    if not config.CRON_NOTIFY_SECRET:
-        logger.info("CRON_NOTIFY_SECRET unset; cron HTTP notify hook disabled")
+    if not config.CRON_NOTIFY_SECRET and not config.STATS_HTTP_ENABLED:
+        logger.info("HTTP hook disabled (no CRON_NOTIFY_SECRET and STATS_HTTP_ENABLED=false)")
         return
+    if not config.CRON_NOTIFY_SECRET:
+        logger.info("CRON_NOTIFY_SECRET unset; POST /notify disabled (/stats still served)")
 
     bind = (config.CRON_NOTIFY_BIND or "127.0.0.1").strip()
     loopback = ("127.0.0.1", "::1", "localhost")
@@ -198,7 +225,7 @@ def start_cron_notify_server(loop: asyncio.AbstractEventLoop, send_html: Callabl
             config.CRON_NOTIFY_PORT,
         )
 
-    if len(config.CRON_NOTIFY_SECRET) < 24:
+    if config.CRON_NOTIFY_SECRET and len(config.CRON_NOTIFY_SECRET) < 24:
         logger.warning("CRON_NOTIFY_SECRET is short; use at least 24 random bytes")
 
     def schedule_notify(html_text: str):
@@ -215,7 +242,17 @@ def start_cron_notify_server(loop: asyncio.AbstractEventLoop, send_html: Callabl
         return
 
     def serve():
-        logger.info("Cron notify HTTP listening on %s:%s", bind, config.CRON_NOTIFY_PORT)
+        extras = []
+        if config.STATS_HTTP_ENABLED:
+            extras.append("GET /stats")
+        if config.CRON_NOTIFY_SECRET:
+            extras.append("POST /notify")
+        logger.info(
+            "Bot HTTP listening on %s:%s (%s)",
+            bind,
+            config.CRON_NOTIFY_PORT,
+            ", ".join(extras) or "no routes",
+        )
         _server.serve_forever()
 
     _server_thread = threading.Thread(target=serve, name="cron-notify", daemon=True)
