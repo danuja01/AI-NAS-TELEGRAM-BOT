@@ -381,6 +381,48 @@ def calculate_health_score() -> tuple[int, List[str]]:
     return score, issues
 
 
+def _primary_temperature_c(temps: Dict[str, Optional[float]]) -> Optional[float]:
+    """Best-effort primary CPU/package temperature (°C), skipping alert-ignored sensors."""
+    if not temps:
+        return None
+    preferred = []
+    other = []
+    for key, value in temps.items():
+        if value is None:
+            continue
+        if config.ignore_temperature_sensor_for_alerts(key):
+            continue
+        k = str(key).lower()
+        if "cpu" in k or "core" in k or "package" in k or "k10temp" in k:
+            preferred.append(value)
+        else:
+            other.append(value)
+    if preferred:
+        return max(preferred)
+    if other:
+        return max(other)
+    return next((v for v in temps.values() if v is not None), None)
+
+
+def get_simple_stats() -> Dict[str, Any]:
+    """
+    Compact CPU/RAM/temp snapshot for HTTP /stats and external dashboards.
+    Returns {"cpu": float, "ram": float, "temp": int | None}.
+    """
+    try:
+        cpu_percent = round(psutil.cpu_percent(interval=1), 1)
+        mem_percent = round(psutil.virtual_memory().percent, 1)
+        primary_temp = _primary_temperature_c(get_temperatures())
+        return {
+            "cpu": cpu_percent,
+            "ram": mem_percent,
+            "temp": int(round(primary_temp)) if primary_temp is not None else None,
+        }
+    except Exception as e:
+        logger.error("Failed to get simple stats: %s", e)
+        return {"cpu": 0.0, "ram": 0.0, "temp": None, "error": str(e)}
+
+
 def get_comprehensive_status() -> Dict[str, Any]:
     """Get comprehensive system status."""
     try:
