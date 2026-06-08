@@ -44,6 +44,8 @@ services:
       - CRON_NOTIFY_BIND=${CRON_NOTIFY_BIND:-0.0.0.0}
       - CRON_NOTIFY_PORT=${CRON_NOTIFY_PORT:-18765}
       - STATS_HTTP_ENABLED=${STATS_HTTP_ENABLED:-true}
+      - STATS_HTTP_PORT=${STATS_HTTP_PORT:-8765}
+      - STATS_HTTP_BIND=${STATS_HTTP_BIND:-0.0.0.0}
       - EMAIL_ALERTS_ENABLED=${EMAIL_ALERTS_ENABLED:-false}
       - EMAIL_ALERT_RECIPIENTS=${EMAIL_ALERT_RECIPIENTS:-}
       - SMTP_HOST=${SMTP_HOST:-}
@@ -111,10 +113,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Secrets: inject via `environment` / env_file — do not bind-mount .env into the container
 
-    # Bot HTTP: GET /stats (default) + cron/Watchtower POST when CRON_NOTIFY_SECRET is set.
-    # Host bind: STATS_HTTP_PUBLISH_HOST=127.0.0.1 (default, localhost only) or 0.0.0.0 (LAN, e.g. Homarr).
+    # GET /stats on STATS_HTTP_PORT (default 8765, LAN). Cron POST stays on 18765 localhost-only.
     ports:
-      - "${STATS_HTTP_PUBLISH_HOST:-127.0.0.1}:${CRON_NOTIFY_PORT:-18765}:${CRON_NOTIFY_PORT:-18765}"
+      - "${STATS_HTTP_PUBLISH_HOST:-0.0.0.0}:${STATS_HTTP_PORT:-8765}:${STATS_HTTP_PORT:-8765}"
+      - "127.0.0.1:${CRON_NOTIFY_PORT:-18765}:${CRON_NOTIFY_PORT:-18765}"
       - "${UPTIME_DASHBOARD_PORT:-18766}:${UPTIME_DASHBOARD_PORT:-18766}"
 
     # Optional: Network configuration

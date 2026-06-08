@@ -38,6 +38,7 @@ from monitoring.auto_troubleshoot import (
     scan_unacknowledged_alerts,
 )
 from monitoring.cron_notify_server import start_cron_notify_server
+from monitoring.stats_server import start_stats_server
 from services.docker_service import list_containers
 from services.host_runner import run_profile
 from services.smart_monitor import get_all_drives
@@ -448,8 +449,9 @@ async def start_health_monitoring(bot: Bot):
                     logger.error("cron_notify broadcast %s: %s", uid, e)
 
         start_cron_notify_server(loop, broadcast_html)
+        start_stats_server()
     except Exception as e:
-        logger.error("cron_notify_server start: %s", e)
+        logger.error("HTTP servers start: %s", e)
 
     if config.UPTIME_MONITORING_ENABLED:
         try:
@@ -467,10 +469,12 @@ def stop_health_monitoring():
     """Stop scheduler and cron hook."""
     global _scheduler
     from monitoring.cron_notify_server import stop_cron_notify_server
+    from monitoring.stats_server import stop_stats_server
     from monitoring.uptime.engine import stop_uptime_monitoring
 
     stop_uptime_monitoring()
     stop_cron_notify_server()
+    stop_stats_server()
     if _scheduler:
         _scheduler.shutdown()
         _scheduler = None

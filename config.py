@@ -188,8 +188,11 @@ CRON_NOTIFY_SECRET = os.getenv("CRON_NOTIFY_SECRET", "").strip()
 CRON_NOTIFY_BIND = os.getenv("CRON_NOTIFY_BIND", "127.0.0.1").strip()
 CRON_NOTIFY_PORT = int(os.getenv("CRON_NOTIFY_PORT", "18765"))
 CRON_NOTIFY_RATE_PER_MINUTE = max(1, int(os.getenv("CRON_NOTIFY_RATE_PER_MINUTE", "30")))
-# GET /stats JSON (cpu, ram, temp) on CRON_NOTIFY_BIND:CRON_NOTIFY_PORT — enabled by default
+# GET /stats JSON (cpu, ram, temp) on STATS_HTTP_BIND:STATS_HTTP_PORT — enabled by default
 STATS_HTTP_ENABLED = _env_bool("STATS_HTTP_ENABLED", True)
+STATS_HTTP_BIND = os.getenv("STATS_HTTP_BIND", "0.0.0.0").strip() or "0.0.0.0"
+STATS_HTTP_PORT = int(os.getenv("STATS_HTTP_PORT", "8765"))
+STATS_HTTP_RATE_PER_MINUTE = max(1, int(os.getenv("STATS_HTTP_RATE_PER_MINUTE", "60")))
 
 # Email alerts for reboot/shutdown (SMTP)
 EMAIL_ALERTS_ENABLED = _env_bool("EMAIL_ALERTS_ENABLED", False)
